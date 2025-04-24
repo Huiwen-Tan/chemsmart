@@ -95,7 +95,7 @@ class GaussianRoute:
 
     def get_job_type(self):
         # get job type: opt/ts/sp/ircf/ircr
-        if "ts" in self.route_string:
+        if "ts" in self.route_string and "irc" not in self.route_string:
             job_type = "ts"
         elif (
             "opt" in self.route_string
