@@ -611,6 +611,65 @@ class Molecule:
             for i in range(3)
         ]
 
+    @cached_property
+    def _point_group_analyzer(self):
+        """
+        Get the pymatgen PointGroupAnalyzer for this molecule.
+
+        Returns a PointGroupAnalyzer object that can be used to determine
+        the molecular point group and other symmetry-related properties.
+        """
+        from pymatgen.core import Molecule as PMGMolecule
+        from pymatgen.symmetry.analyzer import PointGroupAnalyzer
+
+        # Create pymatgen Molecule directly from symbols and positions
+        # to avoid issues with charge/multiplicity being None
+        pmg_mol = PMGMolecule(self.chemical_symbols, self.positions)
+        return PointGroupAnalyzer(pmg_mol)
+
+    @property
+    def point_group(self):
+        """
+        Determine the molecular point group from the geometry.
+
+        Returns the Schoenflies symbol of the molecular point group
+        (e.g., 'C2v', 'D6h', 'Td', 'C*v' for linear molecules).
+
+        Returns
+        -------
+        str
+            The Schoenflies symbol of the molecular point group.
+        """
+        return self._point_group_analyzer.sch_symbol
+
+    @property
+    def rotational_symmetry_number(self):
+        """
+        Determine the rotational symmetry number from the geometry.
+
+        The rotational symmetry number (σ) is the number of indistinguishable
+        orientations of the molecule that can be obtained by rigid rotation.
+        This is used in statistical thermodynamics calculations.
+
+        Common values:
+        - Monoatomic molecules: 1
+        - Linear molecules without center of symmetry (e.g., HCl): 1
+        - Linear molecules with center of symmetry (e.g., CO2, H2): 2
+        - Water (C2v): 2
+        - Ammonia (C3v): 3
+        - Benzene (D6h): 12
+        - Tetrahedral molecules (Td): 12
+
+        Returns
+        -------
+        int
+            The rotational symmetry number.
+        """
+        # Handle monoatomic case (spherical symmetry)
+        if self.is_monoatomic:
+            return 1
+        return self._point_group_analyzer.get_rotational_symmetry_number()
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
         Get chemical formula with flexible formatting options.
