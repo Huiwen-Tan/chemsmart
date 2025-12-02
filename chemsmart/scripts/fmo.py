@@ -118,9 +118,28 @@ def _display_open_shell_fmo(outputfile, unit, energy_unit):
     effective_homo = _apply_unit_conversion(
         outputfile.highest_somo_energy, unit
     )
-    effective_lumo = _apply_unit_conversion(
-        min(outputfile.lumo_alpha_energy, outputfile.lumo_beta_energy), unit
-    )
+
+    lumo_alpha = outputfile.lumo_alpha_energy
+    lumo_beta = outputfile.lumo_beta_energy
+
+    # Handle case where one or both LUMO energies might be None
+    if lumo_alpha is not None and lumo_beta is not None:
+        effective_lumo = _apply_unit_conversion(
+            min(lumo_alpha, lumo_beta), unit
+        )
+    elif lumo_alpha is not None:
+        effective_lumo = _apply_unit_conversion(lumo_alpha, unit)
+    elif lumo_beta is not None:
+        effective_lumo = _apply_unit_conversion(lumo_beta, unit)
+    else:
+        effective_lumo = None
+
+    if effective_homo is None or effective_lumo is None:
+        logger.info(
+            "Cannot calculate chemical properties: "
+            "missing SOMO or LUMO energy values."
+        )
+        return
 
     chemical_potential = 1 / 2 * (effective_lumo + effective_homo)
     chemical_hardness = 1 / 2 * (effective_lumo - effective_homo)
