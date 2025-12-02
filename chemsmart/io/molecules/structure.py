@@ -611,37 +611,6 @@ class Molecule:
             for i in range(3)
         ]
 
-    @cached_property
-    def _point_group_analyzer(self):
-        """
-        Get the pymatgen PointGroupAnalyzer for this molecule.
-
-        Returns a PointGroupAnalyzer object that can be used to determine
-        the molecular point group and other symmetry-related properties.
-        """
-        from pymatgen.core import Molecule as PMGMolecule
-        from pymatgen.symmetry.analyzer import PointGroupAnalyzer
-
-        # Create pymatgen Molecule directly from symbols and positions
-        # to avoid issues with charge/multiplicity being None
-        pmg_mol = PMGMolecule(self.chemical_symbols, self.positions)
-        return PointGroupAnalyzer(pmg_mol)
-
-    @property
-    def point_group(self):
-        """
-        Determine the molecular point group from the geometry.
-
-        Returns the Schoenflies symbol of the molecular point group
-        (e.g., 'C2v', 'D6h', 'Td', 'C*v' for linear molecules).
-
-        Returns
-        -------
-        str
-            The Schoenflies symbol of the molecular point group.
-        """
-        return self._point_group_analyzer.sch_symbol
-
     @property
     def rotational_symmetry_number(self):
         """
@@ -651,24 +620,96 @@ class Molecule:
         orientations of the molecule that can be obtained by rigid rotation.
         This is used in statistical thermodynamics calculations.
 
+        This implementation uses a simplified approach based on molecular
+        geometry characteristics (linearity, center of symmetry) to estimate
+        the symmetry number for common molecular types. For more accurate
+        symmetry numbers, use the value from quantum chemistry output files
+        (e.g., Gaussian, ORCA) which compute this from the full molecular
+        wavefunction.
+
         Common values:
         - Monoatomic molecules: 1
         - Linear molecules without center of symmetry (e.g., HCl): 1
         - Linear molecules with center of symmetry (e.g., CO2, H2): 2
-        - Water (C2v): 2
-        - Ammonia (C3v): 3
-        - Benzene (D6h): 12
-        - Tetrahedral molecules (Td): 12
+        - Non-linear molecules: 1 (default, may be higher for symmetric cases)
 
         Returns
         -------
         int
             The rotational symmetry number.
+
+        Notes
+        -----
+        For accurate symmetry numbers in thermodynamics calculations,
+        prefer using the `rotational_symmetry_number` property from
+        Gaussian16Output or ORCAOutput classes when available, as these
+        are computed by the quantum chemistry software.
         """
-        # Handle monoatomic case (spherical symmetry)
+        # Handle monoatomic case
         if self.is_monoatomic:
             return 1
-        return self._point_group_analyzer.get_rotational_symmetry_number()
+
+        # Handle linear molecules
+        if self.is_linear:
+            # Check for center of symmetry (homonuclear diatomic or
+            # symmetric linear molecules like CO2)
+            if self._has_linear_center_of_symmetry():
+                return 2
+            return 1
+
+        # For non-linear molecules, default to 1
+        # More accurate determination requires full point group analysis
+        return 1
+
+    def _has_linear_center_of_symmetry(self):
+        """
+        Check if a linear molecule has a center of symmetry.
+
+        For linear molecules, checks whether the molecule is symmetric
+        about its center point (e.g., H2, CO2, C2H2 have σ=2).
+
+        Returns
+        -------
+        bool
+            True if the linear molecule has a center of symmetry.
+        """
+        if not self.is_linear:
+            return False
+
+        # Homonuclear diatomic always has center of symmetry
+        if self.is_diatomic:
+            return self.chemical_symbols[0] == self.chemical_symbols[1]
+
+        # For polyatomic linear molecules, check symmetry about center
+        center = self.center_of_mass
+        symbols = np.array(self.chemical_symbols)
+        positions = np.array(self.positions)
+
+        # Get positions relative to center of mass
+        rel_positions = positions - center
+        tol = 0.05  # tolerance in Angstroms
+
+        # Check each atom for a symmetric partner
+        for i, (sym_i, pos_i) in enumerate(zip(symbols, rel_positions)):
+            # Atoms at the center don't need a partner
+            if np.linalg.norm(pos_i) < tol:
+                continue
+
+            # Expected position of symmetric partner
+            mirror_pos = -pos_i
+
+            # Find if there's a matching atom on the other side
+            found_match = False
+            for j, (sym_j, pos_j) in enumerate(zip(symbols, rel_positions)):
+                if i != j and sym_i == sym_j:
+                    if np.linalg.norm(pos_j - mirror_pos) < tol:
+                        found_match = True
+                        break
+
+            if not found_match:
+                return False
+
+        return True
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
