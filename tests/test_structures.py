@@ -407,45 +407,62 @@ class TestStructures:
         assert mol.is_linear
 
     def test_symmetry_properties(self):
-        """Test rotational_symmetry_number property for linear molecules."""
-        # Test CO2 (linear, symmetric, σ=2)
+        """Test point_group and rotational_symmetry_number properties."""
+        # Test CO2 (linear, symmetric, D*h, σ=2)
         mol_co2 = Molecule(
             symbols=["O", "C", "O"],
             positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
         )
+        assert mol_co2.point_group == "D*h"
         assert mol_co2.rotational_symmetry_number == 2
         assert mol_co2.is_linear
 
-        # Test monoatomic species (σ=1)
+        # Test monoatomic species (Kh, σ=1)
         mol_he = Molecule(
             symbols=["He"],
             positions=np.array([[0, 0, 0]]),
         )
+        assert mol_he.point_group == "Kh"
         assert mol_he.rotational_symmetry_number == 1
 
-        # Test H2 (linear, homonuclear diatomic, σ=2)
+        # Test H2 (linear, homonuclear diatomic, D*h, σ=2)
         mol_h2 = Molecule(
             symbols=["H", "H"],
             positions=np.array([[-0.37, 0, 0], [0.37, 0, 0]]),
         )
+        assert mol_h2.point_group == "D*h"
         assert mol_h2.rotational_symmetry_number == 2
 
-        # Test HCl (linear, heteronuclear diatomic, σ=1)
+        # Test HCl (linear, heteronuclear diatomic, C*v, σ=1)
         mol_hcl = Molecule(
             symbols=["H", "Cl"],
             positions=np.array([[0, 0, 0], [1.27, 0, 0]]),
         )
+        assert mol_hcl.point_group == "C*v"
         assert mol_hcl.rotational_symmetry_number == 1
 
-        # Test water (non-linear, defaults to σ=1)
+        # Test water (C2v, σ=2)
         mol_h2o = Molecule(
             symbols=["O", "H", "H"],
             positions=np.array([
                 [0, 0, 0], [0.757, 0.587, 0], [-0.757, 0.587, 0]
             ]),
         )
-        # Non-linear molecules default to 1 without full point group analysis
-        assert mol_h2o.rotational_symmetry_number == 1
+        assert mol_h2o.point_group == "C2v"
+        assert mol_h2o.rotational_symmetry_number == 2
+
+        # Test ammonia (C3v, σ=3) - pyramidal structure
+        mol_nh3 = Molecule(
+            symbols=["N", "H", "H", "H"],
+            positions=np.array([
+                [0, 0, 0.1168],
+                [0, 0.9381, -0.3866],
+                [0.8125, -0.4690, -0.3866],
+                [-0.8125, -0.4690, -0.3866],
+            ]),
+        )
+        assert mol_nh3.point_group == "C3v"
+        assert mol_nh3.rotational_symmetry_number == 3
 
 
 class TestMoleculeAdvanced:
