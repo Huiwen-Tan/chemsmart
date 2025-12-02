@@ -611,6 +611,414 @@ class Molecule:
             for i in range(3)
         ]
 
+    @property
+    def point_group(self):
+        """
+        Determine the molecular point group from the geometry.
+
+        Returns the Schoenflies symbol of the molecular point group
+        determined from the molecular geometry. This implementation
+        uses a geometry-based approach without external dependencies.
+
+        Supported point groups:
+        - Kh: Spherical (monoatomic species)
+        - D*h: Linear with center of symmetry (e.g., H2, CO2)
+        - C*v: Linear without center of symmetry (e.g., HCl, HCN)
+        - C2v: Bent molecules with C2 axis and 2 mirror planes
+        - C3v: Pyramidal molecules with C3 axis (e.g., NH3)
+        - Td: Tetrahedral molecules (e.g., CH4)
+        - C1: No symmetry (asymmetric molecules)
+
+        Returns
+        -------
+        str
+            The Schoenflies symbol of the molecular point group.
+
+        Notes
+        -----
+        This is a simplified implementation that covers common molecular
+        point groups. For complex molecules, consider using computational
+        chemistry software for more accurate point group determination.
+        """
+        # Monoatomic - spherical symmetry
+        if self.is_monoatomic:
+            return "Kh"
+
+        # Linear molecules
+        if self.is_linear:
+            if self._has_linear_center_of_symmetry():
+                return "D*h"
+            return "C*v"
+
+        # Non-linear molecules - analyze symmetry elements
+        return self._determine_nonlinear_point_group()
+
+    def _determine_nonlinear_point_group(self):
+        """
+        Determine the point group for non-linear molecules.
+
+        Analyzes symmetry elements (rotation axes, mirror planes,
+        inversion center) to determine the point group.
+
+        Returns
+        -------
+        str
+            The Schoenflies symbol of the point group.
+        """
+        # Get centered positions
+        center = self.center_of_mass
+        positions = np.array(self.positions) - center
+        symbols = np.array(self.chemical_symbols)
+
+        # Check for inversion center
+        has_inversion = self._has_inversion_center(symbols, positions)
+
+        # Find rotation axes
+        c2_axes = self._find_c2_axes(symbols, positions)
+        c3_axes = self._find_c3_axes(symbols, positions)
+        c4_axes = self._find_c4_axes(symbols, positions)
+
+        # Count mirror planes
+        sigma_v_count = self._count_sigma_v_planes(symbols, positions)
+        sigma_h = self._has_sigma_h(symbols, positions)
+
+        # High symmetry groups
+        if len(c3_axes) >= 4:
+            # Multiple C3 axes suggests cubic symmetry
+            if has_inversion:
+                return "Oh"  # Octahedral
+            return "Td"  # Tetrahedral
+
+        # Dnh groups (Cn + nC2 + σh)
+        if len(c4_axes) >= 1 and len(c2_axes) >= 4 and sigma_h:
+            return "D4h"
+        if len(c3_axes) >= 1 and len(c2_axes) >= 3 and sigma_h:
+            return "D3h"
+        if len(c2_axes) >= 3 and sigma_h:
+            return "D2h"
+
+        # Cnv groups (Cn + nσv)
+        if len(c4_axes) >= 1 and sigma_v_count >= 4:
+            return "C4v"
+        if len(c3_axes) >= 1 and sigma_v_count >= 3:
+            return "C3v"
+        if len(c2_axes) >= 1 and sigma_v_count >= 2:
+            return "C2v"
+
+        # Cn groups (just rotation)
+        if len(c3_axes) >= 1:
+            return "C3"
+        if len(c2_axes) >= 1:
+            return "C2"
+
+        # Cs - only mirror plane
+        if sigma_v_count >= 1 or sigma_h:
+            return "Cs"
+
+        # Ci - only inversion
+        if has_inversion:
+            return "Ci"
+
+        # No symmetry
+        return "C1"
+
+    def _has_inversion_center(self, symbols, positions, tol=0.1):
+        """Check if molecule has an inversion center at origin."""
+        for i, (sym_i, pos_i) in enumerate(zip(symbols, positions)):
+            # Look for matching atom at -pos_i
+            found = False
+            for j, (sym_j, pos_j) in enumerate(zip(symbols, positions)):
+                if sym_i == sym_j and np.linalg.norm(pos_j + pos_i) < tol:
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
+    def _find_c2_axes(self, symbols, positions, tol=0.1):
+        """Find C2 rotation axes."""
+        axes = []
+        n = len(positions)
+
+        # Check axes through pairs of like atoms
+        for i in range(n):
+            for j in range(i + 1, n):
+                if symbols[i] == symbols[j]:
+                    # Midpoint axis
+                    midpoint = (positions[i] + positions[j]) / 2
+                    if np.linalg.norm(midpoint) > 0.01:
+                        axis = midpoint / np.linalg.norm(midpoint)
+                        if self._is_c2_axis(symbols, positions, axis, tol):
+                            axes.append(axis)
+
+        # Check principal axes
+        for axis in [np.array([1, 0, 0]), np.array([0, 1, 0]),
+                     np.array([0, 0, 1])]:
+            if self._is_c2_axis(symbols, positions, axis, tol):
+                if not any(np.abs(np.dot(axis, a)) > 0.99 for a in axes):
+                    axes.append(axis)
+
+        return axes
+
+    def _is_c2_axis(self, symbols, positions, axis, tol=0.1):
+        """Check if given axis is a C2 rotation axis."""
+        axis = axis / np.linalg.norm(axis)
+        # Rotation matrix for 180 degrees about axis
+        cos_angle, sin_angle = -1, 0  # cos(180°), sin(180°)
+        ux, uy, uz = axis
+        c, s = cos_angle, sin_angle
+        R = np.array([
+            [c + ux**2*(1-c), ux*uy*(1-c) - uz*s, ux*uz*(1-c) + uy*s],
+            [uy*ux*(1-c) + uz*s, c + uy**2*(1-c), uy*uz*(1-c) - ux*s],
+            [uz*ux*(1-c) - uy*s, uz*uy*(1-c) + ux*s, c + uz**2*(1-c)]
+        ])
+
+        rotated = positions @ R.T
+        return self._positions_match(symbols, positions, symbols, rotated, tol)
+
+    def _find_c3_axes(self, symbols, positions, tol=0.1):
+        """Find C3 rotation axes."""
+        axes = []
+        n = len(positions)
+
+        # Check axis through each atom
+        for i in range(n):
+            if np.linalg.norm(positions[i]) > 0.01:
+                axis = positions[i] / np.linalg.norm(positions[i])
+                if self._is_cn_axis(symbols, positions, axis, 3, tol):
+                    if not any(np.abs(np.dot(axis, a)) > 0.99 for a in axes):
+                        axes.append(axis)
+
+        return axes
+
+    def _find_c4_axes(self, symbols, positions, tol=0.1):
+        """Find C4 rotation axes."""
+        axes = []
+
+        # Check principal axes
+        for axis in [np.array([1, 0, 0]), np.array([0, 1, 0]),
+                     np.array([0, 0, 1])]:
+            if self._is_cn_axis(symbols, positions, axis, 4, tol):
+                axes.append(axis)
+
+        return axes
+
+    def _is_cn_axis(self, symbols, positions, axis, n, tol=0.1):
+        """Check if given axis is a Cn rotation axis."""
+        axis = axis / np.linalg.norm(axis)
+        angle = 2 * np.pi / n
+        cos_angle, sin_angle = np.cos(angle), np.sin(angle)
+        ux, uy, uz = axis
+        c, s = cos_angle, sin_angle
+        R = np.array([
+            [c + ux**2*(1-c), ux*uy*(1-c) - uz*s, ux*uz*(1-c) + uy*s],
+            [uy*ux*(1-c) + uz*s, c + uy**2*(1-c), uy*uz*(1-c) - ux*s],
+            [uz*ux*(1-c) - uy*s, uz*uy*(1-c) + ux*s, c + uz**2*(1-c)]
+        ])
+
+        rotated = positions @ R.T
+        return self._positions_match(symbols, positions, symbols, rotated, tol)
+
+    def _count_sigma_v_planes(self, symbols, positions, tol=0.1):
+        """Count mirror planes (vertical σv planes)."""
+        count = 0
+        n = len(positions)
+
+        # Check standard planes
+        planes = [
+            np.array([1, 0, 0]),   # yz plane
+            np.array([0, 1, 0]),   # xz plane
+            np.array([0, 0, 1]),   # xy plane
+            np.array([1, 1, 0]) / np.sqrt(2),
+            np.array([1, -1, 0]) / np.sqrt(2),
+            np.array([1, 0, 1]) / np.sqrt(2),
+            np.array([1, 0, -1]) / np.sqrt(2),
+            np.array([0, 1, 1]) / np.sqrt(2),
+            np.array([0, 1, -1]) / np.sqrt(2),
+        ]
+
+        checked_normals = []
+        for normal in planes:
+            if self._is_mirror_plane(symbols, positions, normal, tol):
+                checked_normals.append(normal)
+                count += 1
+
+        # Also check planes passing through pairs of like atoms
+        # (useful for molecules like NH3 where σv planes pass through atoms)
+        for i in range(n):
+            pos_i = positions[i]
+            if np.linalg.norm(pos_i) < 0.01:
+                continue
+            # Plane containing the z-axis and atom i
+            # Normal is perpendicular to both z-axis and atom position in xy
+            pos_xy = np.array([pos_i[0], pos_i[1], 0])
+            if np.linalg.norm(pos_xy) > 0.01:
+                normal = np.cross(np.array([0, 0, 1]), pos_xy)
+                if np.linalg.norm(normal) > 0.01:
+                    normal = normal / np.linalg.norm(normal)
+                    # Check if not already counted (normals are parallel)
+                    is_new = True
+                    for cn in checked_normals:
+                        if np.abs(np.dot(normal, cn)) > 0.9:
+                            is_new = False
+                            break
+                    if is_new and self._is_mirror_plane(
+                        symbols, positions, normal, tol
+                    ):
+                        checked_normals.append(normal)
+                        count += 1
+
+        return count
+
+    def _has_sigma_h(self, symbols, positions, tol=0.1):
+        """Check for horizontal mirror plane (perpendicular to principal axis)."""
+        # Check xy plane (z=0)
+        return self._is_mirror_plane(
+            symbols, positions, np.array([0, 0, 1]), tol
+        )
+
+    def _is_mirror_plane(self, symbols, positions, normal, tol=0.1):
+        """Check if plane with given normal is a mirror plane."""
+        normal = normal / np.linalg.norm(normal)
+        # Reflection matrix
+        R = np.eye(3) - 2 * np.outer(normal, normal)
+        reflected = positions @ R.T
+        return self._positions_match(symbols, positions, symbols, reflected, tol)
+
+    def _positions_match(self, sym1, pos1, sym2, pos2, tol=0.1):
+        """Check if two sets of atoms match (same atoms in equivalent positions)."""
+        if len(sym1) != len(sym2):
+            return False
+
+        matched = [False] * len(sym2)
+        for i, (s1, p1) in enumerate(zip(sym1, pos1)):
+            found = False
+            for j, (s2, p2) in enumerate(zip(sym2, pos2)):
+                if not matched[j] and s1 == s2:
+                    if np.linalg.norm(p1 - p2) < tol:
+                        matched[j] = True
+                        found = True
+                        break
+            if not found:
+                return False
+        return True
+
+    @property
+    def rotational_symmetry_number(self):
+        """
+        Determine the rotational symmetry number from the geometry.
+
+        The rotational symmetry number (σ) is the number of indistinguishable
+        orientations of the molecule that can be obtained by rigid rotation.
+        This is used in statistical thermodynamics calculations.
+
+        This implementation uses the point_group property and a lookup table
+        to determine the symmetry number. For more accurate values, use the
+        value from quantum chemistry output files (e.g., Gaussian, ORCA).
+
+        Common values:
+        - C1, Cs, Ci: σ = 1
+        - C2, C2v, C2h: σ = 2
+        - C3, C3v, C3h: σ = 3
+        - D2, D2h, D2d: σ = 4
+        - D3, D3h, D3d: σ = 6
+        - Td: σ = 12
+        - Oh: σ = 24
+        - Linear C*v: σ = 1
+        - Linear D*h: σ = 2
+
+        Returns
+        -------
+        int
+            The rotational symmetry number.
+
+        Notes
+        -----
+        For accurate symmetry numbers in thermodynamics calculations,
+        prefer using the `rotational_symmetry_number` property from
+        Gaussian16Output or ORCAOutput classes when available, as these
+        are computed by the quantum chemistry software.
+        """
+        # Symmetry number lookup table
+        symmetry_numbers = {
+            "Kh": 1,    # Spherical (monoatomic)
+            "C1": 1,    # No symmetry
+            "Cs": 1,    # Mirror plane only
+            "Ci": 1,    # Inversion only
+            "C2": 2,    # C2 rotation
+            "C2v": 2,   # C2 + 2σv
+            "C2h": 2,   # C2 + σh + i
+            "C3": 3,    # C3 rotation
+            "C3v": 3,   # C3 + 3σv
+            "C3h": 3,   # C3 + σh
+            "C4": 4,    # C4 rotation
+            "C4v": 4,   # C4 + 4σv
+            "D2": 4,    # 3 C2 axes
+            "D2h": 4,   # D2 + σh
+            "D2d": 4,   # D2 + 2σd
+            "D3": 6,    # C3 + 3 C2
+            "D3h": 6,   # D3 + σh
+            "D3d": 6,   # D3 + 3σd
+            "D4h": 8,   # D4 + σh
+            "Td": 12,   # Tetrahedral
+            "Oh": 24,   # Octahedral
+            "C*v": 1,   # Linear, no inversion
+            "D*h": 2,   # Linear, with inversion
+        }
+
+        pg = self.point_group
+        return symmetry_numbers.get(pg, 1)
+
+    def _has_linear_center_of_symmetry(self):
+        """
+        Check if a linear molecule has a center of symmetry.
+
+        For linear molecules, checks whether the molecule is symmetric
+        about its center point (e.g., H2, CO2, C2H2 have σ=2).
+
+        Returns
+        -------
+        bool
+            True if the linear molecule has a center of symmetry.
+        """
+        if not self.is_linear:
+            return False
+
+        # Homonuclear diatomic always has center of symmetry
+        if self.is_diatomic:
+            return self.chemical_symbols[0] == self.chemical_symbols[1]
+
+        # For polyatomic linear molecules, check symmetry about center
+        center = self.center_of_mass
+        symbols = np.array(self.chemical_symbols)
+        positions = np.array(self.positions)
+
+        # Get positions relative to center of mass
+        rel_positions = positions - center
+        tol = 0.05  # tolerance in Angstroms
+
+        # Check each atom for a symmetric partner
+        for i, (sym_i, pos_i) in enumerate(zip(symbols, rel_positions)):
+            # Atoms at the center don't need a partner
+            if np.linalg.norm(pos_i) < tol:
+                continue
+
+            # Expected position of symmetric partner
+            mirror_pos = -pos_i
+
+            # Find if there's a matching atom on the other side
+            found_match = False
+            for j, (sym_j, pos_j) in enumerate(zip(symbols, rel_positions)):
+                if i != j and sym_i == sym_j:
+                    if np.linalg.norm(pos_j - mirror_pos) < tol:
+                        found_match = True
+                        break
+
+            if not found_match:
+                return False
+
+        return True
+
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
         Get chemical formula with flexible formatting options.
