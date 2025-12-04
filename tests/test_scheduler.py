@@ -264,7 +264,16 @@ class TestSchedulerEdgeCases:
         scheduler = SLURMArrayScheduler(jobs=[], server=server)
 
         assert scheduler.num_jobs == 0
-        assert scheduler.array_spec == "0-0"
+        # Empty job list should return empty string for array spec
+        assert scheduler.array_spec == ""
+
+    def test_empty_job_list_submit_raises(self):
+        """Test that submitting empty job list raises ValueError."""
+        server = MockServer()
+        scheduler = SLURMArrayScheduler(jobs=[], server=server)
+
+        with pytest.raises(ValueError, match="Cannot submit SLURM array"):
+            scheduler.submit(test=False)
 
     def test_single_job(self):
         """Test scheduler with single job."""

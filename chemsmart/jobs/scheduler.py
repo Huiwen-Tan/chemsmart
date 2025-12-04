@@ -140,8 +140,12 @@ class SLURMArrayScheduler(Scheduler):
 
         Returns:
             str: Array spec like '0-9%5' for 10 jobs with max 5 concurrent.
+                Returns empty string if no jobs.
         """
         if self.num_jobs == 0:
+            # Return empty string for empty job list - caller should handle
+            return ""
+        if self.num_jobs == 1:
             return "0-0"
         # SLURM arrays are 0-indexed
         array_range = f"0-{self.num_jobs - 1}"
@@ -174,10 +178,9 @@ class SLURMArrayScheduler(Scheduler):
         if self.server.num_gpus:
             lines.append(f"#SBATCH --gres=gpu:{self.server.num_gpus}")
 
-        lines.append(
-            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} "
-            f"--mem={self.server.mem_gb}G"
-        )
+        lines.append("#SBATCH --nodes=1")
+        lines.append(f"#SBATCH --ntasks-per-node={self.server.num_cores}")
+        lines.append(f"#SBATCH --mem={self.server.mem_gb}G")
 
         if self.server.queue_name:
             lines.append(f"#SBATCH --partition={self.server.queue_name}")
@@ -278,10 +281,18 @@ class SLURMArrayScheduler(Scheduler):
             test: If True, only write script without submitting.
 
         Returns:
-            Optional[str]: Job ID if submitted, None if test mode.
+            Optional[str]: Job ID if submitted, None if test mode or no jobs.
+
+        Raises:
+            ValueError: If there are no jobs to submit.
         """
         import shlex
         import subprocess
+
+        # Validate that we have jobs to submit
+        if self.num_jobs == 0:
+            logger.warning("No jobs to submit - empty job list")
+            raise ValueError("Cannot submit SLURM array with no jobs")
 
         # Write the submission script
         script_path = self.write_script()

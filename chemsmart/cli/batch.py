@@ -261,6 +261,10 @@ def _get_cli_args_for_job(job, ctx):
 
     Constructs the CLI arguments needed to run this job via
     'chemsmart run'.
+
+    Note: This is a simplified implementation. The reconstructed args
+    may need modification for individual conformer jobs in multi-job
+    containers like crest or traj.
     """
     from chemsmart.utils.cli import CtxObjArguments
 
@@ -268,7 +272,12 @@ def _get_cli_args_for_job(job, ctx):
     if "subcommand" in ctx.obj:
         commands = ctx.obj["subcommand"]
         args = CtxObjArguments(commands, entry_point="batch")
-        base_args = args.reconstruct_command_line()[1:]  # Remove 'batch'
+        cli_args = args.reconstruct_command_line()
+        # Remove 'batch' entry point if present
+        if cli_args and cli_args[0] == "batch":
+            base_args = cli_args[1:]
+        else:
+            base_args = cli_args
     else:
         base_args = []
 
