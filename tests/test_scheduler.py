@@ -1,8 +1,8 @@
 """
 Tests for the Scheduler module.
 
-This module tests conformer parsing and SLURM array script rendering
-functionality for parallel job submission.
+This module tests SLURM array script rendering and parallel job submission
+functionality for conformer jobs.
 """
 
 import os
@@ -10,10 +10,7 @@ import tempfile
 
 import pytest
 
-from chemsmart.jobs.scheduler import (
-    SLURMArrayScheduler,
-    parse_conformers_from_jobs,
-)
+from chemsmart.jobs.scheduler import SLURMArrayScheduler
 
 
 class MockJob:
@@ -28,9 +25,9 @@ class MockServer:
 
     def __init__(
         self,
-        num_cores=16,
+        num_cores=64,
         num_gpus=0,
-        mem_gb=64,
+        mem_gb=128,
         num_hours=24,
         queue_name="normal",
     ):
@@ -46,14 +43,8 @@ class TestSLURMArrayScheduler:
 
     @pytest.fixture
     def mock_jobs(self):
-        """Create a list of mock jobs for testing."""
-        return [
-            MockJob("mol1_opt"),
-            MockJob("mol2_opt"),
-            MockJob("mol3_opt"),
-            MockJob("mol4_opt"),
-            MockJob("mol5_opt"),
-        ]
+        """Create a list of mock jobs for testing (100 conformers)."""
+        return [MockJob(f"mol_c{i}") for i in range(1, 101)]
 
     @pytest.fixture
     def mock_server(self):
@@ -63,48 +54,30 @@ class TestSLURMArrayScheduler:
     def test_scheduler_initialization(self, mock_jobs, mock_server):
         """Test scheduler initializes correctly with defaults."""
         scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, max_parallel=5
+            jobs=mock_jobs, server=mock_server, max_parallel=4
         )
 
-        assert scheduler.num_jobs == 5
-        assert scheduler.max_parallel == 5
-        assert scheduler.mode == "array"
-        assert scheduler.auto_sp is False
+        assert scheduler.num_jobs == 100
+        assert scheduler.max_parallel == 4
 
-    def test_scheduler_with_auto_sp(self, mock_jobs, mock_server):
-        """Test scheduler with auto_sp enabled."""
+    def test_array_spec_with_parallel_limit(self, mock_jobs, mock_server):
+        """Test array spec with 100 jobs and 4 parallel nodes."""
         scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, auto_sp=True
+            jobs=mock_jobs, server=mock_server, max_parallel=4
         )
 
-        assert scheduler.auto_sp is True
+        # 100 jobs with max 4 concurrent
+        assert scheduler.array_spec == "0-99%4"
 
-    def test_job_labels_property(self, mock_jobs, mock_server):
-        """Test job_labels returns correct labels."""
-        scheduler = SLURMArrayScheduler(jobs=mock_jobs, server=mock_server)
-
-        labels = scheduler.job_labels
-        expected = [
-            "mol1_opt", "mol2_opt", "mol3_opt", "mol4_opt", "mol5_opt"
-        ]
-        assert labels == expected
-
-    def test_array_spec_without_limit(self, mock_jobs, mock_server):
+    def test_array_spec_without_limit(self, mock_server):
         """Test array spec generation without parallel limit."""
+        jobs = [MockJob(f"job{i}") for i in range(5)]
         scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, max_parallel=100
+            jobs=jobs, server=mock_server, max_parallel=100
         )
 
         # max_parallel > num_jobs, so no limit suffix
         assert scheduler.array_spec == "0-4"
-
-    def test_array_spec_with_limit(self, mock_jobs, mock_server):
-        """Test array spec generation with parallel limit."""
-        scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, max_parallel=2
-        )
-
-        assert scheduler.array_spec == "0-4%2"
 
     def test_array_spec_single_job(self, mock_server):
         """Test array spec for single job."""
@@ -120,19 +93,21 @@ class TestSLURMArrayScheduler:
         scheduler = SLURMArrayScheduler(
             jobs=mock_jobs,
             server=mock_server,
-            job_name="test_array",
-            max_parallel=3,
+            job_name="conformer_opt",
+            max_parallel=4,
         )
 
         script = scheduler.render_script()
 
         # Check SBATCH directives
         assert "#!/bin/bash" in script
-        assert "#SBATCH --job-name=test_array" in script
-        assert "#SBATCH --array=0-4%3" in script
-        assert "#SBATCH --output=test_array_%A_%a.slurmout" in script
-        assert "#SBATCH --error=test_array_%A_%a.slurmerr" in script
+        assert "#SBATCH --job-name=conformer_opt" in script
+        assert "#SBATCH --array=0-99%4" in script
+        assert "#SBATCH --output=conformer_opt_%A_%a.slurmout" in script
+        assert "#SBATCH --error=conformer_opt_%A_%a.slurmerr" in script
         assert "#SBATCH --nodes=1" in script
+        assert "#SBATCH --ntasks-per-node=64" in script
+        assert "#SBATCH --mem=128G" in script
         assert "#SBATCH --partition=normal" in script
         assert "#SBATCH --time=24:00:00" in script
 
@@ -144,9 +119,9 @@ class TestSLURMArrayScheduler:
 
         # Check job labels are included
         assert "JOBS=(" in script
-        assert '"mol1_opt"' in script
-        assert '"mol2_opt"' in script
-        assert '"mol3_opt"' in script
+        assert '"mol_c1"' in script
+        assert '"mol_c50"' in script
+        assert '"mol_c100"' in script
 
     def test_render_script_uses_array_task_id(self, mock_jobs, mock_server):
         """Test rendered script uses SLURM_ARRAY_TASK_ID."""
@@ -156,29 +131,6 @@ class TestSLURMArrayScheduler:
 
         assert "SLURM_ARRAY_TASK_ID" in script
         assert "JOB_LABEL=${JOBS[$SLURM_ARRAY_TASK_ID]}" in script
-
-    def test_render_script_with_auto_sp(self, mock_jobs, mock_server):
-        """Test rendered script includes auto SP pipeline when enabled."""
-        scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, auto_sp=True
-        )
-
-        script = scheduler.render_script()
-
-        # Check auto SP pipeline is included
-        assert "Auto SP pipeline" in script
-        assert "_sp.py" in script
-
-    def test_render_script_without_auto_sp(self, mock_jobs, mock_server):
-        """Test rendered script excludes auto SP when disabled."""
-        scheduler = SLURMArrayScheduler(
-            jobs=mock_jobs, server=mock_server, auto_sp=False
-        )
-
-        script = scheduler.render_script()
-
-        # Auto SP pipeline should not be present
-        assert "Auto SP pipeline" not in script
 
     def test_render_script_with_gpu(self, mock_jobs):
         """Test rendered script includes GPU allocation."""
@@ -224,37 +176,6 @@ class TestSLURMArrayScheduler:
                 os.chdir(original_dir)
 
 
-class TestParseConformersFromJobs:
-    """Tests for conformer parsing utility."""
-
-    def test_parse_conformers_basic(self):
-        """Test basic conformer label parsing."""
-        jobs = [MockJob("conf1"), MockJob("conf2"), MockJob("conf3")]
-
-        labels = parse_conformers_from_jobs(jobs)
-
-        assert labels == ["conf1", "conf2", "conf3"]
-
-    def test_parse_conformers_empty_list(self):
-        """Test parsing empty job list."""
-        labels = parse_conformers_from_jobs([])
-
-        assert labels == []
-
-    def test_parse_conformers_with_mixed_objects(self):
-        """Test parsing with objects that may not have label attribute."""
-
-        class NoLabelJob:
-            pass
-
-        jobs = [MockJob("has_label"), NoLabelJob(), MockJob("also_has_label")]
-
-        labels = parse_conformers_from_jobs(jobs)
-
-        # Should only include jobs with label attribute
-        assert labels == ["has_label", "also_has_label"]
-
-
 class TestSchedulerEdgeCases:
     """Tests for edge cases and error handling."""
 
@@ -275,34 +196,11 @@ class TestSchedulerEdgeCases:
         with pytest.raises(ValueError, match="Cannot submit SLURM array"):
             scheduler.submit(test=False)
 
-    def test_single_job(self):
-        """Test scheduler with single job."""
+    def test_job_labels_property(self):
+        """Test job_labels returns correct labels."""
         server = MockServer()
-        jobs = [MockJob("single")]
+        jobs = [MockJob(f"conf{i}") for i in range(1, 6)]
         scheduler = SLURMArrayScheduler(jobs=jobs, server=server)
 
-        assert scheduler.num_jobs == 1
-        script = scheduler.render_script()
-        assert "#SBATCH --array=0-0" in script
-
-    def test_max_parallel_greater_than_jobs(self):
-        """Test max_parallel greater than number of jobs."""
-        server = MockServer()
-        jobs = [MockJob("job1"), MockJob("job2")]
-        scheduler = SLURMArrayScheduler(
-            jobs=jobs, server=server, max_parallel=100
-        )
-
-        # Should not include parallel limit
-        assert scheduler.array_spec == "0-1"
-
-    def test_max_parallel_equals_jobs(self):
-        """Test max_parallel equals number of jobs."""
-        server = MockServer()
-        jobs = [MockJob("job1"), MockJob("job2"), MockJob("job3")]
-        scheduler = SLURMArrayScheduler(
-            jobs=jobs, server=server, max_parallel=3
-        )
-
-        # Should not include parallel limit
-        assert scheduler.array_spec == "0-2"
+        labels = scheduler.job_labels
+        assert labels == ["conf1", "conf2", "conf3", "conf4", "conf5"]

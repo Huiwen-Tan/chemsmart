@@ -2,7 +2,8 @@
 Submission of jobs to queuing system via cli.
 
 This module provides command-line interface for submitting jobs to
-various queuing systems and cluster schedulers.
+various queuing systems and cluster schedulers. Supports parallel
+submission of multiple jobs via SLURM arrays.
 """
 
 import logging
@@ -49,6 +50,17 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Print the generated command.",
 )
+@click.option(
+    "-N",
+    "--num-nodes",
+    type=int,
+    default=None,
+    help="Number of parallel nodes for SLURM array submission. "
+    "When set, jobs with multiple conformers (crest, traj) will be "
+    "submitted as a SLURM array job with max N concurrent tasks. "
+    "E.g., -N 4 means 4 jobs run in parallel; when one finishes, "
+    "the next starts.",
+)
 def sub(
     ctx,
     server,
@@ -65,6 +77,7 @@ def sub(
     verbose,
     test,
     print_command,
+    num_nodes,
     **kwargs,
 ):
     """
@@ -72,6 +85,17 @@ def sub(
 
     This command prepares and submits jobs to cluster schedulers with
     specified resource requirements and queue parameters.
+
+    When -N/--num-nodes is specified, jobs with multiple conformers
+    (e.g., crest, traj) will be submitted as a SLURM array job where
+    N jobs run in parallel. When one finishes, the next automatically
+    starts.
+
+    Example:
+        chemsmart sub -s server -N 4 -n 64 gaussian -p project \\
+            -f conformers.xyz -c 0 -m 1 crest -j opt
+
+        This submits 4 parallel nodes, each with 64 processors.
     """
     # Set up logging
     if verbose:
@@ -104,6 +128,7 @@ def sub(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["num_nodes"] = num_nodes  # Store for parallel submission
 
 
 @sub.result_callback(replace=True)
@@ -114,7 +139,8 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
     This callback function handles job submission by reconstructing
     command-line arguments and interfacing with the appropriate
-    scheduler system.
+    scheduler system. Supports parallel submission via SLURM arrays
+    when -N/--num-nodes is specified.
     """
 
     def _clean_command(ctx):
@@ -144,6 +170,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             "verbose",
             "test",
             "print_command",
+            "num_nodes",
         ]
 
         for keyword in keywords_not_in_run:
@@ -177,12 +204,81 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         server = Server.from_servername(kwargs.get("server"))
         server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
 
+    def _process_parallel_jobs(job, num_nodes):
+        """
+        Process multiple jobs in parallel using SLURM array.
+
+        For jobs with multiple conformers (crest, traj), this submits
+        a SLURM array job where num_nodes jobs run in parallel.
+        When one finishes, the next automatically starts.
+        """
+        from chemsmart.jobs.scheduler import SLURMArrayScheduler
+
+        # Extract individual jobs from the container job
+        if hasattr(job, "all_conformers_jobs"):
+            all_jobs = job.all_conformers_jobs
+            logger.info(
+                f"Found {len(all_jobs)} conformer jobs for parallel submission"
+            )
+        elif hasattr(job, "all_structures_run_jobs"):
+            all_jobs = job.all_structures_run_jobs
+            logger.info(
+                f"Found {len(all_jobs)} structure jobs for parallel submission"
+            )
+        else:
+            # Single job - fall back to single submission
+            logger.info(
+                "Job does not contain multiple conformers, "
+                "submitting as single job"
+            )
+            _process_single_job(job)
+            return
+
+        # Set jobrunner for all jobs
+        jobrunner = ctx.obj["jobrunner"]
+        for j in all_jobs:
+            j.jobrunner = jobrunner
+
+        # Reconstruct CLI args once (same for all jobs in the array)
+        cli_args = _reconstruct_cli_args(ctx, job)
+
+        # Write run scripts for each individual job
+        server = Server.from_servername(kwargs.get("server"))
+        for j in all_jobs:
+            # Write only the run script, not submit
+            server.submit(job=j, test=True, cli_args=cli_args)
+
+        # Create and submit SLURM array job
+        scheduler = SLURMArrayScheduler(
+            jobs=all_jobs,
+            server=server,
+            max_parallel=num_nodes,
+            job_name=job.label,
+        )
+
+        logger.info(
+            f"Submitting SLURM array job with {len(all_jobs)} tasks, "
+            f"max {num_nodes} parallel"
+        )
+
+        if kwargs.get("test"):
+            logger.warning('Not submitting as "test" flag specified.')
+            scheduler.submit(test=True)
+        else:
+            job_id = scheduler.submit(test=False)
+            logger.info(f"Submitted SLURM array job: {job_id}")
+
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
+    num_nodes = ctx.obj.get("num_nodes")
     job = args[0]
     job.jobrunner = jobrunner
 
-    _process_single_job(job=job)
+    # Check if parallel submission is requested
+    if num_nodes is not None and num_nodes > 0:
+        _process_parallel_jobs(job, num_nodes)
+    else:
+        _process_single_job(job=job)
 
 
 for subcommand in subcommands:

@@ -1,91 +1,26 @@
 """
 Scheduler for parallel job submission via SLURM arrays.
 
-This module provides the Scheduler class for managing parallel submission
-of computational chemistry jobs using SLURM array functionality. It supports
-automatic OPT → SP pipelines and configurable parallelism.
+This module provides the SLURMArrayScheduler class for managing parallel
+submission of computational chemistry jobs using SLURM array functionality.
 """
 
 import logging
 import os
-from abc import ABC, abstractmethod
+import shlex
+import subprocess
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class Scheduler(ABC):
-    """
-    Abstract base class for job schedulers.
-
-    Provides the interface for scheduler implementations that handle
-    parallel job submission to cluster schedulers.
-
-    Attributes:
-        jobs (list): List of jobs to be scheduled.
-        max_parallel (int): Maximum number of parallel jobs.
-        mode (str): Scheduling mode ('array' or 'worker').
-        auto_sp (bool): Whether to automatically run SP after OPT.
-    """
-
-    def __init__(
-        self,
-        jobs: List,
-        max_parallel: int = 10,
-        mode: str = "array",
-        auto_sp: bool = False,
-    ):
-        """
-        Initialize the scheduler.
-
-        Args:
-            jobs: List of jobs to be scheduled.
-            max_parallel: Maximum number of parallel jobs. Defaults to 10.
-            mode: Scheduling mode ('array' or 'worker').
-                Defaults to 'array'.
-            auto_sp: Whether to automatically run SP after OPT.
-                Defaults to False.
-        """
-        self.jobs = jobs
-        self.max_parallel = max_parallel
-        self.mode = mode
-        self.auto_sp = auto_sp
-
-    @property
-    def num_jobs(self) -> int:
-        """Get the number of jobs to be scheduled."""
-        return len(self.jobs)
-
-    @abstractmethod
-    def render_script(self) -> str:
-        """
-        Render the submission script for the scheduler.
-
-        Returns:
-            str: The rendered submission script content.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def submit(self, test: bool = False) -> Optional[str]:
-        """
-        Submit the jobs to the scheduler.
-
-        Args:
-            test: If True, only write script without submitting.
-
-        Returns:
-            Optional[str]: Job ID if submitted, None if test mode.
-        """
-        raise NotImplementedError
-
-
-class SLURMArrayScheduler(Scheduler):
+class SLURMArrayScheduler:
     """
     SLURM array job scheduler.
 
     Implements parallel job submission using SLURM array functionality.
-    Each array task runs a single job (or OPT→SP pipeline if auto_sp is True).
+    Each array task runs a single job. When a node finishes, the next
+    job in the queue is automatically assigned to it.
 
     This scheduler generates a single SLURM submission script that uses
     the SLURM_ARRAY_TASK_ID to index into the list of jobs, avoiding
@@ -93,9 +28,7 @@ class SLURMArrayScheduler(Scheduler):
 
     Attributes:
         jobs (list): List of jobs to be scheduled.
-        max_parallel (int): Maximum concurrent array tasks.
-        mode (str): Always 'array' for this scheduler.
-        auto_sp (bool): If True, run SP calculation after OPT completes.
+        max_parallel (int): Maximum concurrent array tasks (nodes).
         server: Server configuration for SLURM submission.
         job_labels (list[str]): Labels for each job in the array.
     """
@@ -104,8 +37,7 @@ class SLURMArrayScheduler(Scheduler):
         self,
         jobs: List,
         server,
-        max_parallel: int = 10,
-        auto_sp: bool = False,
+        max_parallel: int = 4,
         job_name: str = "chemsmart_array",
         **kwargs,
     ):
@@ -115,18 +47,22 @@ class SLURMArrayScheduler(Scheduler):
         Args:
             jobs: List of jobs to be scheduled.
             server: Server configuration with SLURM settings.
-            max_parallel: Maximum concurrent array tasks. Defaults to 10.
-            auto_sp: Run SP after OPT for each task. Defaults to False.
+            max_parallel: Maximum concurrent array tasks (nodes).
+                Defaults to 4.
             job_name: Base name for the SLURM job.
                 Defaults to 'chemsmart_array'.
             **kwargs: Additional keyword arguments.
         """
-        super().__init__(
-            jobs=jobs, max_parallel=max_parallel, mode="array", auto_sp=auto_sp
-        )
+        self.jobs = jobs
+        self.max_parallel = max_parallel
         self.server = server
         self.job_name = job_name
         self.kwargs = kwargs
+
+    @property
+    def num_jobs(self) -> int:
+        """Get the number of jobs to be scheduled."""
+        return len(self.jobs)
 
     @property
     def job_labels(self) -> List[str]:
@@ -139,11 +75,10 @@ class SLURMArrayScheduler(Scheduler):
         Get the SLURM array specification string.
 
         Returns:
-            str: Array spec like '0-9%5' for 10 jobs with max 5 concurrent.
+            str: Array spec like '0-99%4' for 100 jobs with max 4 concurrent.
                 Returns empty string if no jobs.
         """
         if self.num_jobs == 0:
-            # Return empty string for empty job list - caller should handle
             return ""
         if self.num_jobs == 1:
             return "0-0"
@@ -224,23 +159,6 @@ class SLURMArrayScheduler(Scheduler):
         lines.append("fi")
         lines.append("")
 
-        # Auto-SP pipeline if enabled
-        if self.auto_sp:
-            lines.append(
-                "# Auto SP pipeline - run SP after OPT completes"
-            )
-            lines.append("if [ $? -eq 0 ]; then")
-            lines.append('    SP_SCRIPT="chemsmart_run_${JOB_LABEL}_sp.py"')
-            lines.append('    if [ -f "$SP_SCRIPT" ]; then')
-            lines.append(
-                '        echo "Running SP calculation for $JOB_LABEL"'
-            )
-            lines.append('        chmod +x "$SP_SCRIPT"')
-            lines.append('        python "$SP_SCRIPT"')
-            lines.append("    fi")
-            lines.append("fi")
-            lines.append("")
-
         lines.append("wait")
 
         return "\n".join(lines)
@@ -286,9 +204,6 @@ class SLURMArrayScheduler(Scheduler):
         Raises:
             ValueError: If there are no jobs to submit.
         """
-        import shlex
-        import subprocess
-
         # Validate that we have jobs to submit
         if self.num_jobs == 0:
             logger.warning("No jobs to submit - empty job list")
@@ -330,19 +245,3 @@ class SLURMArrayScheduler(Scheduler):
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to submit SLURM array job: {e.stderr}")
             raise RuntimeError(f"SLURM submission failed: {e.stderr}") from e
-
-
-def parse_conformers_from_jobs(jobs: List) -> List[str]:
-    """
-    Parse conformer labels from a list of jobs.
-
-    Utility function to extract labels from job objects for
-    use in scheduler configuration.
-
-    Args:
-        jobs: List of job objects with label attribute.
-
-    Returns:
-        list[str]: List of job labels.
-    """
-    return [job.label for job in jobs if hasattr(job, "label")]
