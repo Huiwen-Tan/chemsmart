@@ -171,7 +171,7 @@ class TestSLURMArrayScheduler:
 
                 assert result is None
                 # Script should still be written
-                assert os.path.exists(scheduler.script_filename)
+                assert os.path.exists(scheduler.submit_script)
             finally:
                 os.chdir(original_dir)
 

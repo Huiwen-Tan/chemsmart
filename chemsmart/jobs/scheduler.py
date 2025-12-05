@@ -6,10 +6,12 @@ submission of computational chemistry jobs using SLURM array functionality.
 """
 
 import logging
-import os
 import shlex
 import subprocess
-from typing import List, Optional
+
+from chemsmart.settings.user import ChemsmartUserSettings
+
+user_settings = ChemsmartUserSettings()
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +37,10 @@ class SLURMArrayScheduler:
 
     def __init__(
         self,
-        jobs: List,
+        jobs,
         server,
-        max_parallel: int = 4,
-        job_name: str = "chemsmart_array",
+        max_parallel=None,
+        job_name=None,
         **kwargs,
     ):
         """
@@ -48,9 +50,7 @@ class SLURMArrayScheduler:
             jobs: List of jobs to be scheduled.
             server: Server configuration with SLURM settings.
             max_parallel: Maximum concurrent array tasks (nodes).
-                Defaults to 4.
             job_name: Base name for the SLURM job.
-                Defaults to 'chemsmart_array'.
             **kwargs: Additional keyword arguments.
         """
         self.jobs = jobs
@@ -60,17 +60,17 @@ class SLURMArrayScheduler:
         self.kwargs = kwargs
 
     @property
-    def num_jobs(self) -> int:
+    def num_jobs(self):
         """Get the number of jobs to be scheduled."""
         return len(self.jobs)
 
     @property
-    def job_labels(self) -> List[str]:
+    def job_labels(self):
         """Get the labels for all jobs in the array."""
         return [job.label for job in self.jobs]
 
     @property
-    def array_spec(self) -> str:
+    def array_spec(self):
         """
         Get the SLURM array specification string.
 
@@ -88,110 +88,122 @@ class SLURMArrayScheduler:
             array_range += f"%{self.max_parallel}"
         return array_range
 
-    def render_script(self) -> str:
+    def _write_bash_header(self, f):
         """
-        Render the SLURM array submission script.
-
-        Generates a bash script with SLURM directives that uses
-        SLURM_ARRAY_TASK_ID to select which job to run.
-
-        Returns:
-            str: Complete SLURM submission script content.
-        """
-        lines = []
-
-        # Bash header
-        lines.append("#!/bin/bash")
-        lines.append("")
-
-        # SLURM directives
-        lines.append(f"#SBATCH --job-name={self.job_name}")
-        lines.append(f"#SBATCH --array={self.array_spec}")
-        lines.append(f"#SBATCH --output={self.job_name}_%A_%a.slurmout")
-        lines.append(f"#SBATCH --error={self.job_name}_%A_%a.slurmerr")
-
-        if self.server.num_gpus:
-            lines.append(f"#SBATCH --gres=gpu:{self.server.num_gpus}")
-
-        lines.append("#SBATCH --nodes=1")
-        lines.append(f"#SBATCH --ntasks-per-node={self.server.num_cores}")
-        lines.append(f"#SBATCH --mem={self.server.mem_gb}G")
-
-        if self.server.queue_name:
-            lines.append(f"#SBATCH --partition={self.server.queue_name}")
-
-        if self.server.num_hours:
-            lines.append(f"#SBATCH --time={self.server.num_hours}:00:00")
-
-        lines.append("")
-        lines.append("")
-
-        # Change to submission directory
-        lines.append("cd $SLURM_SUBMIT_DIR")
-        lines.append("")
-
-        # Job mapping - create array of job labels
-        lines.append("# Job labels array")
-        lines.append("JOBS=(")
-        for label in self.job_labels:
-            lines.append(f'    "{label}"')
-        lines.append(")")
-        lines.append("")
-
-        # Get current job label from array index
-        lines.append("# Get current job label")
-        lines.append("JOB_LABEL=${JOBS[$SLURM_ARRAY_TASK_ID]}")
-        lines.append(
-            'echo "Running job: $JOB_LABEL (array task $SLURM_ARRAY_TASK_ID)"'
-        )
-        lines.append("")
-
-        # Run the job using chemsmart run script
-        lines.append("# Execute the job")
-        lines.append("if [ -f \"chemsmart_run_${JOB_LABEL}.py\" ]; then")
-        lines.append("    chmod +x chemsmart_run_${JOB_LABEL}.py")
-        lines.append("    python chemsmart_run_${JOB_LABEL}.py")
-        lines.append("else")
-        lines.append(
-            '    echo "Error: Run script not found for job $JOB_LABEL"'
-        )
-        lines.append("    exit 1")
-        lines.append("fi")
-        lines.append("")
-
-        lines.append("wait")
-
-        return "\n".join(lines)
-
-    @property
-    def script_filename(self) -> str:
-        """Get the filename for the submission script."""
-        return f"chemsmart_array_sub_{self.job_name}.sh"
-
-    def write_script(self, directory: Optional[str] = None) -> str:
-        """
-        Write the submission script to a file.
+        Write the bash shebang header to the script.
 
         Args:
-            directory: Directory to write the script. Defaults to current dir.
-
-        Returns:
-            str: Path to the written script file.
+            f: File handle for writing the script.
         """
-        script_content = self.render_script()
+        f.write("#!/bin/bash\n\n")
 
-        if directory is None:
-            directory = os.getcwd()
+    def _write_scheduler_options(self, f):
+        """
+        Write SLURM-specific directives to the submission script.
 
-        script_path = os.path.join(directory, self.script_filename)
+        Args:
+            f: File handle for writing SLURM directives.
+        """
+        f.write(f"#SBATCH --job-name={self.job_name}_%a\n")
+        f.write(f"#SBATCH --array={self.array_spec}\n")
+        f.write(f"#SBATCH --output={self.job_name}_%a.slurmout\n")
+        f.write(f"#SBATCH --error={self.job_name}_%a.slurmerr\n")
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        f.write(
+            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
+        )
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
+        f.write("\n")
+        f.write("\n")
 
-        with open(script_path, "w") as f:
-            f.write(script_content)
+    def _write_change_to_job_directory(self, f):
+        """
+        Write SLURM-specific directory change command.
 
-        logger.info(f"Written SLURM array script to: {script_path}")
-        return script_path
+        Uses SLURM_SUBMIT_DIR environment variable to change to the
+        job submission directory.
 
-    def submit(self, test: bool = False) -> Optional[str]:
+        Args:
+            f: File handle for writing directory change command.
+        """
+        f.write("cd $SLURM_SUBMIT_DIR\n\n")
+
+    def _write_job_array_mapping(self, f):
+        """
+        Write the job labels array mapping.
+
+        Args:
+            f: File handle for writing job mapping.
+        """
+        f.write("# Job labels array\n")
+        f.write("JOBS=(\n")
+        for label in self.job_labels:
+            f.write(f'    "{label}"\n')
+        f.write(")\n\n")
+
+    def _write_job_selection(self, f):
+        """
+        Write commands to select current job from array.
+
+        Args:
+            f: File handle for writing job selection logic.
+        """
+        f.write("# Get current job label\n")
+        f.write("JOB_LABEL=${JOBS[$SLURM_ARRAY_TASK_ID]}\n")
+        f.write(
+            'echo "Running job: $JOB_LABEL (array task $SLURM_ARRAY_TASK_ID)"\n\n'
+        )
+
+    def _write_job_execution(self, f):
+        """
+        Write commands to execute the selected job.
+
+        Args:
+            f: File handle for writing job execution commands.
+        """
+        f.write("# Execute the job\n")
+        f.write('if [ -f "chemsmart_run_${JOB_LABEL}.py" ]; then\n')
+        f.write("    chmod +x chemsmart_run_${JOB_LABEL}.py\n")
+        f.write("    python chemsmart_run_${JOB_LABEL}.py\n")
+        f.write("else\n")
+        f.write('    echo "Error: Run script not found for job $JOB_LABEL"\n')
+        f.write("    exit 1\n")
+        f.write("fi\n\n")
+        f.write("wait\n")
+
+    def _write_script(self):
+        """
+        Write the complete SLURM array submission script.
+        """
+        with open(self.submit_script, "w") as f:
+            logger.debug(
+                f"Written SLURM array script to: {self.submit_script}"
+            )
+            self._write_bash_header(f)
+            self._write_scheduler_options(f)
+            self._write_change_to_job_directory(f)
+            self._write_job_array_mapping(f)
+            self._write_job_selection(f)
+            self._write_job_execution(f)
+
+    @property
+    def submit_script(self):
+        """Get the filename for the submission script."""
+        if self.job_name is not None:
+            return f"chemsmart_array_sub_{self.job_name}.sh"
+        return "chemsmart_array_sub.sh"
+
+    def submit(self, test=False):
         """
         Submit the SLURM array job.
 
@@ -210,16 +222,16 @@ class SLURMArrayScheduler:
             raise ValueError("Cannot submit SLURM array with no jobs")
 
         # Write the submission script
-        script_path = self.write_script()
+        self._write_script()
 
         if test:
             logger.info(
-                f"Test mode: script written to {script_path}, not submitted."
+                f"Test mode: script written to {self.submit_script}, not submitted."
             )
             return None
 
         # Submit using sbatch
-        command = f"sbatch {script_path}"
+        command = f"sbatch {self.submit_script}"
         logger.info(f"Submitting SLURM array job: {command}")
 
         try:
@@ -229,8 +241,7 @@ class SLURMArrayScheduler:
                 text=True,
                 check=True,
             )
-            # Parse job ID from sbatch output
-            # (typically "Submitted batch job XXXXX")
+
             output = result.stdout.strip()
             logger.info(f"SLURM submission output: {output}")
 

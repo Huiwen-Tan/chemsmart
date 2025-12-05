@@ -55,11 +55,7 @@ logger = logging.getLogger(__name__)
     "--num-nodes",
     type=int,
     default=None,
-    help="Number of parallel nodes for SLURM array submission. "
-    "When set, jobs with multiple conformers (crest, traj) will be "
-    "submitted as a SLURM array job with max N concurrent tasks. "
-    "E.g., -N 4 means 4 jobs run in parallel; when one finishes, "
-    "the next starts.",
+    help="Number of parallel nodes for SLURM array submission. ",
 )
 def sub(
     ctx,
@@ -86,14 +82,14 @@ def sub(
     This command prepares and submits jobs to cluster schedulers with
     specified resource requirements and queue parameters.
 
-    When -N/--num-nodes is specified, jobs with multiple conformers
-    (e.g., crest, traj) will be submitted as a SLURM array job where
+    When -N/--num-nodes is specified, jobs with multiple sub-jobs
+    (e.g., crest, traj, irc) will be submitted as a SLURM array job where
     N jobs run in parallel. When one finishes, the next automatically
     starts.
 
     Example:
         chemsmart sub -s server -N 4 -n 64 gaussian -p project \\
-            -f conformers.xyz -c 0 -m 1 crest -j opt
+            -f crest_conformers.xyz -c 0 -m 1 crest -j opt
 
         This submits 4 parallel nodes, each with 64 processors.
     """
@@ -208,7 +204,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         """
         Process multiple jobs in parallel using SLURM array.
 
-        For jobs with multiple conformers (crest, traj), this submits
+        For jobs with multiple sub-jobs (crest, traj, irc), this submits
         a SLURM array job where num_nodes jobs run in parallel.
         When one finishes, the next automatically starts.
         """
