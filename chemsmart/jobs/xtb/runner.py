@@ -382,6 +382,11 @@ class FakeXTB:
 
         num_atoms = int(lines[0].strip())
 
+        # Get charge and multiplicity with defaults
+        charge = self.settings.charge if self.settings.charge is not None else 0
+        multiplicity = self.settings.multiplicity if self.settings.multiplicity is not None else 1
+        unpaired = multiplicity - 1
+
         # Write fake output
         with open(output_file, "w") as g:
             g.write("      -----------------------------------------------------------\n")
@@ -396,8 +401,8 @@ class FakeXTB:
             g.write(f"   * xtb version 6.6.1 (fake)\n")
             g.write("\n")
             g.write(f"      # atoms: {num_atoms}\n")
-            g.write(f"     charge: {self.settings.charge}\n")
-            g.write(f"     unpaired: {self.settings.multiplicity - 1}\n")
+            g.write(f"     charge: {charge}\n")
+            g.write(f"     unpaired: {unpaired}\n")
             g.write(f"     method: {self.settings.method}\n")
             g.write("\n")
 
