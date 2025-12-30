@@ -135,19 +135,50 @@ class XTBJob(Job):
     def from_jobtype(
         cls, jobtype, molecule, settings=None, label=None, **kwargs
     ):
-        if jobtype.lower() == "opt":
+        """
+        Create an XTB job from a job type string.
+        
+        Args:
+            jobtype (str): Job type - 'sp', 'opt', 'freq', 'hess'
+            molecule: Molecule object
+            settings: XTBJobSettings instance
+            label: Job label
+            **kwargs: Additional arguments
+            
+        Returns:
+            XTBJob subclass instance
+        """
+        jobtype_lower = jobtype.lower()
+        
+        if jobtype_lower == "opt":
             from chemsmart.jobs.xtb.opt import XTBOptJob
-
             logger.debug(f"Creating XTBOptJob from jobtype: {jobtype}")
-
             return XTBOptJob(
                 molecule=molecule,
                 settings=settings,
                 label=label,
                 **kwargs,
             )
+        elif jobtype_lower in ["sp", "singlepoint"]:
+            from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
+            logger.debug(f"Creating XTBSinglePointJob from jobtype: {jobtype}")
+            return XTBSinglePointJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
+        elif jobtype_lower in ["freq", "hess", "frequency"]:
+            from chemsmart.jobs.xtb.freq import XTBFreqJob
+            logger.debug(f"Creating XTBFreqJob from jobtype: {jobtype}")
+            return XTBFreqJob(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                **kwargs,
+            )
         else:
-            raise ValueError(f"Invalid job type: {jobtype}")
+            raise ValueError(f"Invalid job type: {jobtype}. Supported types: opt, sp, freq")
 
     def _determine_folder(self):
         """
