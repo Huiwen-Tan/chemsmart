@@ -1,4 +1,5 @@
 import logging
+import os
 from functools import cached_property
 
 import numpy as np
@@ -11,8 +12,50 @@ logger = logging.getLogger(__name__)
 
 
 class XTBOutput(FolderMixin):
-    def __init__(self, folder):
-        self.folder = folder
+    def __init__(self, folder=None, filename=None):
+        """
+        Initialize XTBOutput from either a folder or a specific output file.
+        
+        Args:
+            folder (str, optional): Path to folder containing XTB output files
+            filename (str, optional): Path to specific XTB output file
+        """
+        if filename is not None:
+            # If filename is provided, extract folder and set filename
+            self.filename = os.path.abspath(filename)
+            self.folder = os.path.dirname(self.filename)
+        elif folder is not None:
+            # If only folder is provided, look for .out file in folder
+            self.folder = folder
+            # Find the main output file in the folder
+            self.filename = self._find_output_file()
+        else:
+            raise ValueError("Either folder or filename must be provided")
+    
+    def _find_output_file(self):
+        """Find the main XTB output file in the folder."""
+        # Look for .out files in the folder
+        for file in os.listdir(self.folder):
+            if file.endswith('.out') and os.path.getsize(os.path.join(self.folder, file)) > 0:
+                return os.path.join(self.folder, file)
+        return None
+    
+    @property
+    def contents(self):
+        """Read the main output file contents."""
+        if self.filename is None or not os.path.exists(self.filename):
+            return []
+        with open(self.filename, 'r') as f:
+            return [line.rstrip() for line in f.readlines()]
+    
+    def _xtbopt_log_path(self):
+        """Return the path to xtbopt.log file."""
+        return os.path.join(self.folder, "xtbopt.log")
+    
+    @property
+    def has_xtbopt_log(self):
+        """Check if xtbopt.log file exists."""
+        return os.path.exists(self._xtbopt_log_path())
 
     @property
     def xtb_version(self):
@@ -1044,7 +1087,7 @@ class XTBOutput(FolderMixin):
         forces = [None] * (len(energies) if energies is not None else n)
 
         # 3) Build Molecule list
-        create_molecule_list(
+        return create_molecule_list(
             orientations=orientations,
             orientations_pbc=orientations_pbc,
             energies=energies,

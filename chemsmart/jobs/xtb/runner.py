@@ -105,28 +105,47 @@ class XTBJobRunner(JobRunner):
         job.molecule.write_xyz(self.job_inputfile, mode="w")
 
     def _get_command(self, job=None, **kwargs):
+        """Build the xTB command line."""
         exe = self._get_executable()
-        command = f"{exe} {self.job_inputfile} "
-        return command
-
-    def _create_process(self, job, command, env):
         settings = job.settings
-        if (
-            settings.solvent_model is not None
-            and settings.solvent_id is not None
-        ):
-            command += (
-                f"--{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
-                f"--uhf {settings.uhf} --{settings.solvent_model} {settings.solvent_id}"
-            )
-        else:
-            command += (
-                f"--{settings.gfn_version} "
-                f"--{settings.job_type} {settings.optimization_level} --chrg {settings.charge} "
-                f"--uhf {settings.uhf}"
-            )
-
+        
+        # Start with executable and input file
+        command_parts = [exe, self.job_inputfile]
+        
+        # Add GFN version (default to gfn2 if not specified)
+        gfn_version = settings.gfn_version if settings.gfn_version else "gfn2"
+        command_parts.append(f"--{gfn_version}")
+        
+        # Add job type if specified
+        if settings.job_type:
+            if settings.job_type.lower() == "opt":
+                # For optimization, add optimization level if specified
+                if settings.optimization_level:
+                    command_parts.extend(["--opt", settings.optimization_level])
+                else:
+                    command_parts.append("--opt")
+            elif settings.job_type.lower() == "hess" or settings.freq:
+                command_parts.append("--hess")
+            # For SP (single point), no additional flag needed
+        
+        # Add charge if specified
+        if settings.charge is not None:
+            command_parts.extend(["--chrg", str(settings.charge)])
+        
+        # Add unpaired electrons (uhf) if specified
+        if settings.uhf is not None:
+            command_parts.extend(["--uhf", str(settings.uhf)])
+        
+        # Add solvent model if specified
+        if settings.solvent_model is not None and settings.solvent_id is not None:
+            command_parts.extend([f"--{settings.solvent_model.lower()}", settings.solvent_id])
+        
+        # Join all parts into a single command string
+        command = " ".join(command_parts)
+        return command
+    
+    def _create_process(self, job, command, env):
+        """Create and start the xTB process."""
         with (
             open(self.job_outputfile, "w") as out,
             open(self.job_errfile, "w") as err,
