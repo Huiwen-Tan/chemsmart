@@ -264,3 +264,51 @@ class NCIPLOTExecutable(Executable):
         if self.executable_folder is not None:
             executable_path = os.path.join(self.executable_folder, "nciplot")
             return executable_path
+
+
+class XTBExecutable(Executable):
+    """
+    Executable handler for xTB semi-empirical quantum chemistry software.
+
+    This class provides specific implementation for managing xTB
+    executable paths and configurations, with auto-detection support.
+    """
+
+    PROGRAM = "XTB"
+
+    def __init__(self, executable_folder=None, **kwargs):
+        """
+        Initialize XTBExecutable instance.
+
+        Args:
+            executable_folder (str, optional): Path to xTB executable directory.
+            **kwargs: Additional arguments passed to parent Executable class.
+        """
+        super().__init__(executable_folder=executable_folder, **kwargs)
+
+    def get_executable(self):
+        """
+        Get the full path to the xTB executable.
+
+        Auto-detects xTB in PATH if executable_folder is not explicitly set.
+
+        Returns:
+            str or None: Full path to xtb executable if found, None otherwise.
+        """
+        import shutil
+
+        # If executable_folder is explicitly set, use it
+        if self.executable_folder is not None:
+            executable_path = os.path.join(self.executable_folder, "xtb")
+            return executable_path
+
+        # Otherwise, try to auto-detect xtb in PATH
+        xtb_path = shutil.which("xtb")
+        if xtb_path:
+            logger.info(f"Auto-detected xTB executable at: {xtb_path}")
+            return xtb_path
+
+        logger.warning(
+            "xTB executable not found in PATH and no EXEFOLDER specified"
+        )
+        return None
