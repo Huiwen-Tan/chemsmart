@@ -1093,6 +1093,7 @@ class XTBOutput(FolderMixin):
             energies=energies,
             forces=forces,
             symbols=symbols,
+            charge=self.net_charge,
             multiplicity=self.multiplicity,
             frozen_atoms=None,
             pbc_conditions=None,

@@ -1,6 +1,7 @@
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 from contextlib import suppress
 from functools import lru_cache
@@ -52,7 +53,6 @@ class XTBJobRunner(JobRunner):
                 pass
             
             # Auto-detect xtb in PATH
-            import shutil
             executable_path = shutil.which("xtb")
             if executable_path is None:
                 raise TypeError(
@@ -123,7 +123,7 @@ class XTBJobRunner(JobRunner):
         command_parts = [exe, self.job_inputfile]
         
         # Add GFN version (default to gfn2 if not specified)
-        gfn_version = settings.gfn_version if settings.gfn_version else "gfn2"
+        gfn_version = settings.gfn_version or "gfn2"
         command_parts.append(f"--{gfn_version}")
         
         # Add job type if specified
