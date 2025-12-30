@@ -20,7 +20,7 @@ class XTBJobSettings:
     various xTB-specific options.
 
     Attributes:
-        method (str): xTB method to use ('GFN0-xTB', 'GFN1-xTB', 'GFN2-xTB', 'GFN-FF').
+        method (str): xTB method to use ('GFN1-xTB', 'GFN2-xTB', 'GFN-FF').
         charge (int): Molecular charge.
         multiplicity (int): Spin multiplicity (unpaired electrons + 1).
         solvent (str | None): Solvent for ALPB implicit solvation.
@@ -52,7 +52,7 @@ class XTBJobSettings:
         Initialize xTB job settings.
 
         Args:
-            method: xTB method ('GFN0-xTB', 'GFN1-xTB', 'GFN2-xTB', 'GFN-FF')
+            method: xTB method ('GFN1-xTB', 'GFN2-xTB', 'GFN-FF')
             charge: Molecular charge
             multiplicity: Spin multiplicity
             solvent: Solvent identifier for ALPB solvation

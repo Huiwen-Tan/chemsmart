@@ -175,8 +175,3 @@ class TestXTBJobRunner:
         assert "xtbsp" in XTBJobRunner.JOBTYPES
         assert "xtbopt" in XTBJobRunner.JOBTYPES
         assert XTBJobRunner.PROGRAM == "xtb"
-
-
-if __name__ == "__main__":
-    # Run tests
-    pytest.main([__file__, "-v"])

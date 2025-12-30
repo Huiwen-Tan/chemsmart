@@ -205,9 +205,11 @@ class XTBJobRunner(JobRunner):
         elif self.num_cores:
             env["OMP_NUM_THREADS"] = str(self.num_cores)
 
-        # Open output and error files using context managers is better,
-        # but subprocess.Popen needs file objects that stay open
-        # We'll ensure they're closed in _run() after process completes
+        # Open output and error files
+        # Initialize to None for error handling
+        outfile = None
+        errfile = None
+        
         try:
             outfile = open(self.running_outputfile, "w")
             errfile = open(self.running_errfile, "w")
@@ -220,16 +222,16 @@ class XTBJobRunner(JobRunner):
                 env=env,
             )
 
-            # Store file handles to close later in _run()
-            process._outfile = outfile
-            process._errfile = errfile
+            # Store file handles as instance variables for cleanup in _run()
+            self._current_outfile = outfile
+            self._current_errfile = errfile
 
             return process
         except Exception as e:
             # Clean up file handles if process creation fails
-            if 'outfile' in locals():
+            if outfile is not None:
                 outfile.close()
-            if 'errfile' in locals():
+            if errfile is not None:
                 errfile.close()
             raise
 
@@ -246,11 +248,13 @@ class XTBJobRunner(JobRunner):
         """
         returncode = process.wait()
 
-        # Close file handles
-        if hasattr(process, "_outfile"):
-            process._outfile.close()
-        if hasattr(process, "_errfile"):
-            process._errfile.close()
+        # Close file handles stored as instance variables
+        if hasattr(self, "_current_outfile") and self._current_outfile:
+            self._current_outfile.close()
+            self._current_outfile = None
+        if hasattr(self, "_current_errfile") and self._current_errfile:
+            self._current_errfile.close()
+            self._current_errfile = None
 
         return returncode
 
