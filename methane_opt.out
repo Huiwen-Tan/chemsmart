@@ -1,0 +1,38 @@
+      -----------------------------------------------------------
+     |                   =====================                   |
+     |                           x T B                           |
+     |                   =====================                   |
+     |                         S. Grimme                         |
+     |          Mulliken Center for Theoretical Chemistry        |
+     |                    University of Bonn                     |
+      -----------------------------------------------------------
+
+   * xtb version 6.6.1 (fake)
+
+      # atoms: 5
+     charge: 0
+     unpaired: 0
+     method: GFN2-xTB
+
+   *** GEOMETRY OPTIMIZATION ***
+   optimization converged!
+
+         -------------------------------------------------
+         |                Property Printout                |
+         -------------------------------------------------
+
+         * total energy  :      -12.34567890 Eh
+
+         -------------------------------------------------
+         |                   Mulliken Charges              |
+         -------------------------------------------------
+         1  C    -0.123456
+         2  C    -0.123456
+         3  C    -0.123456
+         4  C    -0.123456
+         5  C    -0.123456
+
+   * finished run on 2024/01/01 at 12:00:00.000
+
+   * wall-time:     0 d,  0 h,  0 min,  0.123 sec
+   *  cpu-time:     0 d,  0 h,  0 min,  0.123 sec
