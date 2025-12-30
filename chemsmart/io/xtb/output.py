@@ -121,7 +121,7 @@ class XTBOutput:
         if os.path.exists(xtbopt_file):
             try:
                 atoms = ase.io.read(xtbopt_file)
-                molecule = Molecule.from_ase(atoms)
+                molecule = Molecule.from_ase_atoms(atoms)
                 logger.info(f"Read optimized structure from {xtbopt_file}")
                 return molecule
             except Exception as e:
@@ -166,7 +166,7 @@ class XTBOutput:
                 symbols = [coord[0] for coord in coordinates]
                 positions = [coord[1] for coord in coordinates]
                 atoms = ase.Atoms(symbols=symbols, positions=positions)
-                return Molecule.from_ase(atoms)
+                return Molecule.from_ase_atoms(atoms)
             except Exception as e:
                 logger.error(f"Failed to create molecule from coordinates: {e}")
 
