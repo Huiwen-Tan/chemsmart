@@ -39,21 +39,31 @@ class XTBJobRunner(JobRunner):
     @property
     @lru_cache(maxsize=12)
     def executable(self):
-        """Executable class object for XTB."""
+        """Executable class object for XTB with auto-detection."""
         try:
-            executable_path = XTBExecutable().get_executable()
+            # First try to get executable from settings
+            try:
+                xtb_exec = XTBExecutable()
+                executable_path = xtb_exec.get_executable()
+                if executable_path is not None:
+                    logger.debug(f"Found xtb executable from settings: {executable_path}")
+                    return xtb_exec
+            except Exception:
+                pass
+            
+            # Auto-detect xtb in PATH
+            import shutil
+            executable_path = shutil.which("xtb")
             if executable_path is None:
-                import shutil
-
-                executable_path = shutil.which("xtb")
-                if executable_path is None:
-                    raise TypeError(
-                        "xtb executable not found in path or settings."
-                    )
-
-            executable_path = os.path.dirname(executable_path)
-            executable = XTBExecutable(executable_path)
-            logger.debug(f"Obtained xtb executable: {executable}")
+                raise TypeError(
+                    "xtb executable not found in PATH or settings. "
+                    "Please ensure xTB is installed and accessible."
+                )
+            
+            # Get the directory containing the executable
+            executable_folder = os.path.dirname(executable_path)
+            executable = XTBExecutable(executable_folder)
+            logger.info(f"Auto-detected xtb executable at: {executable_path}")
             return executable
         except TypeError as e:
             logger.error(f"No xtb executable is found: {e}\n")

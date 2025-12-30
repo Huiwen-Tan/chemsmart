@@ -1,3 +1,8 @@
+from .input import XTBInput
+from .output import XTBOutput
+from .folder import XTBFolder
+
+
 class XTBRefs:
     XTB_GROUPS = [
         "chrg",  # Set the charge of the molecule
@@ -49,3 +54,11 @@ class XTBRefs:
         "gbsa",  # Generalized born model with solvent accessable surface area contributions
         "alpb",  # analytical linearized Poisson-Boltzmann model
     ]
+
+
+__all__ = [
+    "XTBInput",
+    "XTBOutput",
+    "XTBFolder",
+    "XTBRefs",
+]

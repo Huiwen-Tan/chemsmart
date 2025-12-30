@@ -148,16 +148,64 @@ class XTBJobSettings(MolecularJobSettings):
 
     @classmethod
     def default(cls):
+        """Return default XTB job settings."""
         return cls(
             gfn_version="gfn2",
-            optimization_level="vtight",
-            charge=None,
-            uhf=None,
+            optimization_level="normal",
+            charge=0,  # Neutral molecule
+            uhf=0,  # Singlet (no unpaired electrons)
             job_type=None,
             title="xtb job with default settings",
             freq=False,
             solvent_model=None,
             solvent_id=None,
+        )
+    
+    @classmethod
+    def sp(cls, gfn_version="gfn2", charge=0, uhf=0, solvent_model=None, solvent_id=None, **kwargs):
+        """Create settings for single point energy calculation."""
+        return cls(
+            gfn_version=gfn_version,
+            charge=charge,
+            uhf=uhf,
+            job_type=None,  # SP doesn't need explicit job_type
+            title="XTB Single Point Energy Calculation",
+            freq=False,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            **kwargs,
+        )
+    
+    @classmethod
+    def opt(cls, gfn_version="gfn2", optimization_level="normal", charge=0, uhf=0, 
+            solvent_model=None, solvent_id=None, **kwargs):
+        """Create settings for geometry optimization."""
+        return cls(
+            gfn_version=gfn_version,
+            optimization_level=optimization_level,
+            charge=charge,
+            uhf=uhf,
+            job_type="opt",
+            title="XTB Geometry Optimization",
+            freq=False,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            **kwargs,
+        )
+    
+    @classmethod
+    def freq(cls, gfn_version="gfn2", charge=0, uhf=0, solvent_model=None, solvent_id=None, **kwargs):
+        """Create settings for frequency/Hessian calculation."""
+        return cls(
+            gfn_version=gfn_version,
+            charge=charge,
+            uhf=uhf,
+            job_type="hess",
+            title="XTB Frequency Calculation",
+            freq=True,
+            solvent_model=solvent_model,
+            solvent_id=solvent_id,
+            **kwargs,
         )
 
     @classmethod
