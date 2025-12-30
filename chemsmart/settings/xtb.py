@@ -161,8 +161,9 @@ class XTBJobSettings:
             args.extend(["--iterations", str(self.max_iterations)])
 
         # Add optimization level if specified
+        # These are standalone convergence criteria flags (--tight, --loose, etc.)
         if self.opt_level is not None:
-            args.extend(["--" + self.opt_level])
+            args.append(f"--{self.opt_level}")
 
         # Add parallel threads if specified
         if self.parallel is not None:

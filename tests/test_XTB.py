@@ -11,10 +11,6 @@ import ase
 import pytest
 from ase import Atoms
 
-# Add parent directory to path for imports
-import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from chemsmart.jobs.xtb import XTBJob, XTBOptJob, XTBSinglePointJob, XTBJobRunner
 from chemsmart.settings.xtb import XTBJobSettings
 from chemsmart.io.xtb.output import XTBOutput

@@ -205,23 +205,33 @@ class XTBJobRunner(JobRunner):
         elif self.num_cores:
             env["OMP_NUM_THREADS"] = str(self.num_cores)
 
-        # Open output and error files
-        outfile = open(self.running_outputfile, "w")
-        errfile = open(self.running_errfile, "w")
+        # Open output and error files using context managers is better,
+        # but subprocess.Popen needs file objects that stay open
+        # We'll ensure they're closed in _run() after process completes
+        try:
+            outfile = open(self.running_outputfile, "w")
+            errfile = open(self.running_errfile, "w")
 
-        process = subprocess.Popen(
-            command,
-            stdout=outfile,
-            stderr=errfile,
-            cwd=self.running_directory,
-            env=env,
-        )
+            process = subprocess.Popen(
+                command,
+                stdout=outfile,
+                stderr=errfile,
+                cwd=self.running_directory,
+                env=env,
+            )
 
-        # Store file handles to close later
-        process._outfile = outfile
-        process._errfile = errfile
+            # Store file handles to close later in _run()
+            process._outfile = outfile
+            process._errfile = errfile
 
-        return process
+            return process
+        except Exception as e:
+            # Clean up file handles if process creation fails
+            if 'outfile' in locals():
+                outfile.close()
+            if 'errfile' in locals():
+                errfile.close()
+            raise
 
     def _run(self, process, **kwargs):
         """
@@ -265,6 +275,13 @@ class XTBJobRunner(JobRunner):
             job: The job object
         """
         import shutil
+        from pathlib import Path
+
+        # Validate that job folder exists and is a directory
+        job_folder_path = Path(job.folder).resolve()
+        if not job_folder_path.is_dir():
+            logger.error(f"Job folder does not exist: {job_folder_path}")
+            return
 
         # Define files to copy
         files_to_copy = [
@@ -291,10 +308,18 @@ class XTBJobRunner(JobRunner):
             if os.path.exists(src):
                 files_to_copy.append((src, dst))
 
-        # Copy files
+        # Copy files with path validation
         for src, dst in files_to_copy:
             if os.path.exists(src):
                 try:
+                    # Validate destination is within job folder
+                    dst_path = Path(dst).resolve()
+                    if not dst_path.is_relative_to(job_folder_path):
+                        logger.error(
+                            f"Destination {dst} is outside job folder, skipping"
+                        )
+                        continue
+
                     shutil.copy2(src, dst)
                     logger.debug(f"Copied {src} to {dst}")
                 except Exception as e:

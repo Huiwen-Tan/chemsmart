@@ -92,8 +92,9 @@ class XTBOutput:
 
         # Pattern for total energy in xTB output
         # Example: "          | TOTAL ENERGY              -10.123456789012 Eh   |"
+        # Handle both regular floats and scientific notation
         energy_pattern = re.compile(
-            r"TOTAL ENERGY\s+([-+]?\d+\.\d+)\s+Eh"
+            r"TOTAL ENERGY\s+([-+]?\d+\.\d+(?:[eE][-+]?\d+)?)\s+Eh"
         )
 
         for line in self.contents:
@@ -324,10 +325,9 @@ class XTBOutput:
             dict or None: Dictionary with dipole components and magnitude
         """
         # Pattern for dipole moment in xTB output
-        for line in self.contents:
+        for idx, line in enumerate(self.contents):
             if "molecular dipole" in line.lower():
                 # Next few lines contain dipole information
-                idx = self.contents.index(line)
                 for i in range(idx, min(idx + 10, len(self.contents))):
                     if "total (Debye)" in self.contents[i]:
                         parts = self.contents[i].split()
