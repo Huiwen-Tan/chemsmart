@@ -9,6 +9,7 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
     R,
     atm_to_pa,
@@ -56,7 +57,8 @@ class Thermochemistry:
 
     def __init__(
         self,
-        filename,
+        filename=None,
+        folder=None,
         temperature=None,
         concentration=None,
         pressure=1.0,
@@ -70,7 +72,14 @@ class Thermochemistry:
         **kwargs,
     ):
         self.filename = filename
-        self.molecule = Molecule.from_filepath(filename)
+        self.folder = folder
+
+        # Create molecule from filename or folder
+        if filename is not None:
+            self.molecule = Molecule.from_filepath(filename)
+        else:
+            self.molecule = Molecule.from_directorypath(folder)
+
         self.temperature = temperature
         self.pressure = pressure
         self.use_weighted_mass = use_weighted_mass
@@ -142,9 +151,11 @@ class Thermochemistry:
             output = Gaussian16Output(self.filename)
         elif program == "orca":
             output = ORCAOutput(self.filename)
+        elif program == "xtb":
+            output = XTBOutput(self.folder)
         else:
-            # can be added in future to parse other file formats
-            raise ValueError("Unsupported file format.")
+            # can be added in future to parse other formats
+            raise ValueError("Unsupported format.")
         if not output.normal_termination:
             raise ValueError(
                 f"File '{self.filename}' did not terminate normally. "

@@ -1130,6 +1130,44 @@ def orca_yaml_settings_orca_project_name(orca_yaml_settings_directory):
     return os.path.join(orca_yaml_settings_directory, "orca")
 
 
+# master xTB test directory
+@pytest.fixture()
+def xtb_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "XTBTests")
+
+
+@pytest.fixture()
+def xtb_inputs_directory(xtb_test_directory):
+    xtb_inputs_directory = os.path.join(xtb_test_directory, "inputs")
+    return os.path.abspath(xtb_inputs_directory)
+
+
+@pytest.fixture()
+def xtb_default_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "default.inp")
+
+
+@pytest.fixture()
+def xtb_sp_alpb_inputfile(xtb_inputs_directory):
+    return os.path.join(xtb_inputs_directory, "alpb_water.inp")
+
+
+@pytest.fixture()
+def xtb_outputs_directory(xtb_test_directory):
+    xtb_outputs_directory = os.path.join(xtb_test_directory, "outputs")
+    return os.path.abspath(xtb_outputs_directory)
+
+
+@pytest.fixture()
+def xtb_co2_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_opt")
+
+
+@pytest.fixture()
+def xtb_water_outfile(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "water_ohess")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
