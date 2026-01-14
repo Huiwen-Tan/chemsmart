@@ -774,8 +774,6 @@ class Molecule:
                 raise ValueError(f"Empty molecule list in JSON file: {filepath}")
 
             # Parse index for slicing
-            from chemsmart.utils.utils import string2index_1based
-
             idx = string2index_1based(index)
 
             # Create all molecules

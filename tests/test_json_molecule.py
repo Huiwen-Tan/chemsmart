@@ -158,7 +158,7 @@ class TestJSONMolecule:
             os.unlink(temp_path)
 
     def test_read_molecule_by_index_first(self):
-        """Test reading the first molecule using index=1."""
+        """Test reading the first molecule using index='1' (string)."""
         mol_data = [
             {
                 "symbols": ["H", "H"],
