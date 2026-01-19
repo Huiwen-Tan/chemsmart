@@ -145,3 +145,220 @@ class TestFolderMixin:
         )
         assert file2 in log_files
         assert file1 not in log_files
+
+
+class TestGaussianOutputFMOProperties:
+    """Test FMO-related properties from FileMixin with Gaussian output files."""
+
+    def test_gaussian_singlet_fmo_properties(
+        self, gaussian_singlet_opt_outfile
+    ):
+        """Test FMO properties for closed-shell (singlet) system."""
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        g = Gaussian16Output(gaussian_singlet_opt_outfile)
+
+        # Test multiplicity and unpaired electrons
+        assert g.multiplicity == 1
+        assert g.num_unpaired_electrons == 0
+
+        # Test SOMO properties (should be None for singlet)
+        assert g.somo_energies is None
+        assert g.lowest_somo_energy is None
+        assert g.highest_somo_energy is None
+
+        # Test HOMO/LUMO energies
+        assert g.homo_energy is not None
+        assert g.lumo_energy is not None
+        assert g.alpha_homo_energy is not None
+        assert g.alpha_lumo_energy is not None
+
+        # Test FMO gap
+        assert g.fmo_gap is not None
+        assert g.fmo_gap > 0
+        assert g.alpha_fmo_gap is not None
+
+    def test_gaussian_triplet_fmo_properties(
+        self, gaussian_triplet_opt_outfile
+    ):
+        """Test FMO properties for open-shell (triplet) system."""
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        g = Gaussian16Output(gaussian_triplet_opt_outfile)
+
+        # Test multiplicity and unpaired electrons
+        assert g.multiplicity == 3
+        assert g.num_unpaired_electrons == 2
+
+        # Test SOMO properties (should exist for triplet)
+        assert g.somo_energies is not None
+        assert len(g.somo_energies) == 2
+        assert g.lowest_somo_energy is not None
+        assert g.highest_somo_energy is not None
+        assert g.lowest_somo_energy <= g.highest_somo_energy
+
+        # Test alpha/beta HOMO/LUMO energies
+        assert g.alpha_homo_energy is not None
+        assert g.beta_homo_energy is not None
+        assert g.alpha_lumo_energy is not None
+        assert g.beta_lumo_energy is not None
+
+        # Test that homo_energy and lumo_energy are None for open-shell
+        assert g.homo_energy is None
+        assert g.lumo_energy is None
+
+        # Test FMO gaps
+        assert g.fmo_gap is not None
+        assert g.alpha_fmo_gap is not None
+        assert g.beta_fmo_gap is not None
+
+    def test_gaussian_quintet_fmo_properties(
+        self, gaussian_quintet_opt_outfile
+    ):
+        """Test FMO properties for open-shell (quintet) system."""
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        g = Gaussian16Output(gaussian_quintet_opt_outfile)
+
+        # Test multiplicity and unpaired electrons
+        assert g.multiplicity == 5
+        assert g.num_unpaired_electrons == 4
+
+        # Test SOMO properties (should exist for quintet)
+        assert g.somo_energies is not None
+        assert len(g.somo_energies) == 4
+        assert g.lowest_somo_energy is not None
+        assert g.highest_somo_energy is not None
+
+        # Test that SOMO energies are ordered
+        somo = g.somo_energies
+        for i in range(len(somo) - 1):
+            assert somo[i] <= somo[i + 1]
+
+
+class TestORCAOutputFMOProperties:
+    """Test FMO-related properties from FileMixin with ORCA output files."""
+
+    def test_orca_singlet_fmo_properties(self, fe2_singlet_output):
+        """Test FMO properties for closed-shell (singlet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe2_singlet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 1
+        assert o.num_unpaired_electrons == 0
+
+        # Test SOMO properties (should be None for singlet)
+        assert o.somo_energies is None
+        assert o.lowest_somo_energy is None
+        assert o.highest_somo_energy is None
+
+        # Test HOMO/LUMO energies
+        assert o.homo_energy is not None
+        assert o.lumo_energy is not None
+        assert o.alpha_homo_energy is not None
+        assert o.alpha_lumo_energy is not None
+
+        # Test FMO gap
+        assert o.fmo_gap is not None
+        assert o.fmo_gap > 0
+        assert o.alpha_fmo_gap is not None
+
+    def test_orca_triplet_fmo_properties(self, fe2_triplet_output):
+        """Test FMO properties for open-shell (triplet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe2_triplet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 3
+        assert o.num_unpaired_electrons == 2
+
+        # Test SOMO properties (should exist for triplet)
+        assert o.somo_energies is not None
+        assert len(o.somo_energies) == 2
+        assert o.lowest_somo_energy is not None
+        assert o.highest_somo_energy is not None
+        assert o.lowest_somo_energy <= o.highest_somo_energy
+
+        # Test alpha/beta HOMO/LUMO energies
+        assert o.alpha_homo_energy is not None
+        assert o.beta_homo_energy is not None
+        assert o.alpha_lumo_energy is not None
+        assert o.beta_lumo_energy is not None
+
+        # Test that homo_energy and lumo_energy are None for open-shell
+        assert o.homo_energy is None
+        assert o.lumo_energy is None
+
+        # Test FMO gaps
+        assert o.fmo_gap is not None
+        assert o.alpha_fmo_gap is not None
+        assert o.beta_fmo_gap is not None
+
+    def test_orca_quintet_fmo_properties(self, fe2_quintet_output):
+        """Test FMO properties for open-shell (quintet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe2_quintet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 5
+        assert o.num_unpaired_electrons == 4
+
+        # Test SOMO properties (should exist for quintet)
+        assert o.somo_energies is not None
+        assert len(o.somo_energies) == 4
+        assert o.lowest_somo_energy is not None
+        assert o.highest_somo_energy is not None
+
+        # Test that SOMO energies are ordered
+        somo = o.somo_energies
+        for i in range(len(somo) - 1):
+            assert somo[i] <= somo[i + 1]
+
+    def test_orca_doublet_fmo_properties(self, fe3_doublet_output):
+        """Test FMO properties for open-shell (doublet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe3_doublet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 2
+        assert o.num_unpaired_electrons == 1
+
+        # Test SOMO properties (should exist for doublet)
+        assert o.somo_energies is not None
+        assert len(o.somo_energies) == 1
+        assert o.lowest_somo_energy is not None
+        assert o.highest_somo_energy is not None
+        assert o.lowest_somo_energy == o.highest_somo_energy
+
+    def test_orca_quartet_fmo_properties(self, fe3_quartet_output):
+        """Test FMO properties for open-shell (quartet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe3_quartet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 4
+        assert o.num_unpaired_electrons == 3
+
+        # Test SOMO properties (should exist for quartet)
+        assert o.somo_energies is not None
+        assert len(o.somo_energies) == 3
+
+    def test_orca_sextet_fmo_properties(self, fe3_sextet_output):
+        """Test FMO properties for open-shell (sextet) system."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        o = ORCAOutput(fe3_sextet_output)
+
+        # Test multiplicity and unpaired electrons
+        assert o.multiplicity == 6
+        assert o.num_unpaired_electrons == 5
+
+        # Test SOMO properties (should exist for sextet)
+        assert o.somo_energies is not None
+        assert len(o.somo_energies) == 5
