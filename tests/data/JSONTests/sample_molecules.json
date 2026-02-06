@@ -1,0 +1,101 @@
+[
+  {
+    "symbols": ["H", "H"],
+    "positions": [
+      [0.0, 0.0, 0.0],
+      [0.74, 0.0, 0.0]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "energy": -1.1336,
+    "info": {
+      "name": "Hydrogen molecule",
+      "method": "B3LYP/6-31G*"
+    }
+  },
+  {
+    "symbols": ["O", "O"],
+    "positions": [
+      [0.0, 0.0, 0.0],
+      [1.208, 0.0, 0.0]
+    ],
+    "charge": 0,
+    "multiplicity": 3,
+    "energy": -150.3254,
+    "info": {
+      "name": "Oxygen molecule",
+      "method": "B3LYP/6-31G*"
+    }
+  },
+  {
+    "symbols": ["N", "N"],
+    "positions": [
+      [0.0, 0.0, 0.0],
+      [1.098, 0.0, 0.0]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "energy": -109.5421,
+    "info": {
+      "name": "Nitrogen molecule",
+      "method": "B3LYP/6-31G*"
+    }
+  },
+  {
+    "symbols": ["C", "O"],
+    "positions": [
+      [0.0, 0.0, 0.0],
+      [1.128, 0.0, 0.0]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "energy": -113.3087,
+    "vibrational_frequencies": [2169.8],
+    "vibrational_reduced_masses": [6.86],
+    "vibrational_force_constants": [19.03],
+    "vibrational_ir_intensities": [98.7],
+    "info": {
+      "name": "Carbon monoxide",
+      "method": "B3LYP/6-31G*"
+    }
+  },
+  {
+    "symbols": ["C", "H", "H", "H", "H"],
+    "positions": [
+      [0.0, 0.0, 0.0],
+      [0.629, 0.629, 0.629],
+      [-0.629, -0.629, 0.629],
+      [-0.629, 0.629, -0.629],
+      [0.629, -0.629, -0.629]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "energy": -40.5175,
+    "info": {
+      "name": "Methane",
+      "method": "B3LYP/6-31G*",
+      "geometry": "optimized"
+    }
+  },
+  {
+    "symbols": ["H", "O", "H"],
+    "positions": [
+      [0.758, 0.0, 0.504],
+      [0.0, 0.0, 0.0],
+      [-0.758, 0.0, 0.504]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "energy": -76.4268,
+    "mulliken_atomic_charges": {
+      "H1": 0.417,
+      "O2": -0.834,
+      "H3": 0.417
+    },
+    "info": {
+      "name": "Water",
+      "method": "B3LYP/6-31G*",
+      "geometry": "optimized"
+    }
+  }
+]

@@ -786,6 +786,10 @@ class Molecule:
         if basename.endswith(".sdf"):
             return cls._read_sdf_file(filepath)
 
+        if basename.endswith(".json"):
+            logger.debug(f"Reading json file: {filepath}")
+            return cls._read_json_file(filepath, index, return_list)
+
         if basename.endswith((".com", ".gjf")):
             return cls._read_gaussian_inputfile(filepath)
 
@@ -849,6 +853,164 @@ class Molecule:
 
         sdf_file = SDFFile(filepath)
         return sdf_file.molecule
+
+    @classmethod
+    @file_cache()
+    def _read_json_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read JSON format molecular structure dataset file.
+
+        The JSON file should contain molecule data with the following structure:
+        - Single molecule: A dictionary with molecule attributes
+        - Multiple molecules: A list of dictionaries with molecule attributes
+
+        Expected JSON structure for a single molecule:
+        {
+            "symbols": ["C", "H", "H", "H", "H"],
+            "positions": [[0.0, 0.0, 0.0], [1.09, 0.0, 0.0], ...],
+            "charge": 0,
+            "multiplicity": 1,
+            "energy": -40.5,
+            ...
+        }
+
+        For multiple molecules:
+        [
+            {"symbols": [...], "positions": [...], ...},
+            {"symbols": [...], "positions": [...], ...},
+            ...
+        ]
+
+        Args:
+            filepath (str): Path to JSON file
+            index (str): Index for selecting specific molecule(s) from a list.
+                        Supports Python slice notation (e.g., "-1", "0", "0:5", ":").
+                        Ignored if JSON contains a single molecule dictionary.
+            return_list (bool): If True, always return a list. Default False.
+
+        Returns:
+            Molecule or list[Molecule]: Single molecule or list of molecules
+
+        Raises:
+            ValueError: If JSON format is invalid or required fields are missing
+            FileNotFoundError: If file doesn't exist
+        """
+        import json
+
+        logger.debug(f"Reading JSON file: {filepath}")
+
+        # Read JSON file
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        # Handle single molecule (dict) vs multiple molecules (list)
+        if isinstance(data, dict):
+            # Single molecule
+            molecule = cls._molecule_from_json_dict(data)
+            if return_list:
+                return [molecule]
+            return molecule
+        elif isinstance(data, list):
+            # Multiple molecules
+            if not data:
+                raise ValueError(f"Empty molecule list in JSON file: {filepath}")
+
+            # Parse index for slicing
+            idx = string2index_1based(index)
+
+            # Create all molecules
+            molecules = [cls._molecule_from_json_dict(mol_data) for mol_data in data]
+
+            # Apply index selection
+            if isinstance(idx, slice):
+                selected = molecules[idx]
+            elif isinstance(idx, int):
+                selected = molecules[idx]
+            else:
+                # Handle list of indices
+                selected = [molecules[i] for i in idx]
+
+            # Return based on return_list flag
+            if return_list:
+                if isinstance(selected, list):
+                    return selected
+                return [selected]
+            else:
+                if isinstance(selected, list) and len(selected) == 1:
+                    return selected[0]
+                return selected
+        else:
+            raise ValueError(
+                f"JSON file must contain a dictionary (single molecule) "
+                f"or a list (multiple molecules), got {type(data).__name__}"
+            )
+
+    @staticmethod
+    def _molecule_from_json_dict(data):
+        """
+        Create a Molecule instance from a JSON dictionary.
+
+        Args:
+            data (dict): Dictionary containing molecule attributes
+
+        Returns:
+            Molecule: Molecule instance
+
+        Raises:
+            ValueError: If required fields (symbols, positions) are missing
+        """
+        import numpy as np
+
+        # Validate required fields
+        if "symbols" not in data:
+            raise ValueError("JSON molecule data must include 'symbols' field")
+        if "positions" not in data:
+            raise ValueError("JSON molecule data must include 'positions' field")
+
+        # Convert positions to numpy array if needed
+        positions = data.get("positions")
+        if positions is not None:
+            positions = np.array(positions, dtype=float)
+
+        # Convert forces to numpy array if present
+        forces = data.get("forces")
+        if forces is not None:
+            forces = np.array(forces, dtype=float)
+
+        # Convert velocities to numpy array if present
+        velocities = data.get("velocities")
+        if velocities is not None:
+            velocities = np.array(velocities, dtype=float)
+
+        # Convert vibrational modes to numpy arrays if present
+        vibrational_modes = data.get("vibrational_modes")
+        if vibrational_modes is not None and vibrational_modes:
+            vibrational_modes = [np.array(mode, dtype=float) for mode in vibrational_modes]
+
+        # Create Molecule with all available attributes
+        return Molecule(
+            symbols=data.get("symbols"),
+            positions=positions,
+            charge=data.get("charge"),
+            multiplicity=data.get("multiplicity"),
+            frozen_atoms=data.get("frozen_atoms"),
+            pbc_conditions=data.get("pbc_conditions"),
+            translation_vectors=data.get("translation_vectors"),
+            energy=data.get("energy"),
+            forces=forces,
+            velocities=velocities,
+            vibrational_frequencies=data.get("vibrational_frequencies"),
+            vibrational_reduced_masses=data.get("vibrational_reduced_masses"),
+            vibrational_force_constants=data.get("vibrational_force_constants"),
+            vibrational_ir_intensities=data.get("vibrational_ir_intensities"),
+            vibrational_mode_symmetries=data.get("vibrational_mode_symmetries"),
+            vibrational_modes=vibrational_modes,
+            info=data.get("info"),
+            structure_index_in_file=data.get("structure_index_in_file"),
+            rotational_symmetry_number=data.get("rotational_symmetry_number"),
+            mulliken_atomic_charges=data.get("mulliken_atomic_charges"),
+            is_optimized_structure=data.get("is_optimized_structure"),
+        )
 
     @staticmethod
     @file_cache()
