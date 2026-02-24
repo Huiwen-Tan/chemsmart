@@ -14,6 +14,8 @@ from rdkit.Chem import rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
+import pymsym
+
 from chemsmart.io.molecules import get_bond_cutoff
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.utils.geometry import is_collinear
@@ -283,6 +285,19 @@ class Molecule:
         """
         if self.symbols is not None:
             return list(self.symbols)
+
+    @property
+    def atomic_numbers(self):
+        """
+        Return a list of atomic numbers for each atom in the molecule.
+
+        Returns
+        -------
+        list[int]
+            Atomic numbers (proton counts) for each atom in the same
+            order as ``symbols`` and ``positions``.
+        """
+        return [p.to_atomic_number(symbol) for symbol in self.symbols]
 
     @property
     def atomic_radii_list(self):
@@ -611,23 +626,25 @@ class Molecule:
             for i in range(3)
         ]
 
+    # Mapping from pymsym point group names to conventional Schoenflies notation
+    _PYMSYM_PG_MAP = {
+        "Cinfv": "C*v",
+        "Dinfh": "D*h",
+    }
+
     @property
     def point_group(self):
         """
         Determine the molecular point group from the geometry.
 
         Returns the Schoenflies symbol of the molecular point group
-        determined from the molecular geometry. This implementation
-        uses a geometry-based approach without external dependencies.
+        determined from the molecular geometry. Uses the ``pymsym``
+        library (backed by libmsym) for accurate point group
+        determination, with a geometry-based fallback.
 
-        Supported point groups:
-        - Kh: Spherical (monoatomic species)
-        - D*h: Linear with center of symmetry (e.g., H2, CO2)
-        - C*v: Linear without center of symmetry (e.g., HCl, HCN)
-        - C2v: Bent molecules with C2 axis and 2 mirror planes
-        - C3v: Pyramidal molecules with C3 axis (e.g., NH3)
-        - Td: Tetrahedral molecules (e.g., CH4)
-        - C1: No symmetry (asymmetric molecules)
+        Supported point groups include all standard Schoenflies symbols
+        such as C1, Cs, Ci, Cn, Cnv, Cnh, Dn, Dnh, Dnd, Sn, T, Th,
+        Td, O, Oh, Kh, C*v, and D*h.
 
         Returns
         -------
@@ -636,21 +653,26 @@ class Molecule:
 
         Notes
         -----
-        This is a simplified implementation that covers common molecular
-        point groups. For complex molecules, consider using computational
-        chemistry software for more accurate point group determination.
+        Linear molecule point groups are returned as ``C*v`` and ``D*h``
+        (as in conventional spectroscopic notation) rather than pymsym's
+        internal ``Cinfv``/``Dinfh`` labels.
         """
-        # Monoatomic - spherical symmetry
+        try:
+            pg = pymsym.get_point_group(
+                self.atomic_numbers, self.positions.tolist()
+            )
+            return self._PYMSYM_PG_MAP.get(pg, pg)
+        except (pymsym.Error, pymsym.ArgumentError, AssertionError,
+                ValueError, RuntimeError):
+            pass
+
+        # Fallback: geometry-based implementation
         if self.is_monoatomic:
             return "Kh"
-
-        # Linear molecules
         if self.is_linear:
             if self._has_linear_center_of_symmetry():
                 return "D*h"
             return "C*v"
-
-        # Non-linear molecules - analyze symmetry elements
         return self._determine_nonlinear_point_group()
 
     def _determine_nonlinear_point_group(self):
@@ -912,9 +934,9 @@ class Molecule:
         orientations of the molecule that can be obtained by rigid rotation.
         This is used in statistical thermodynamics calculations.
 
-        This implementation uses the point_group property and a lookup table
-        to determine the symmetry number. For more accurate values, use the
-        value from quantum chemistry output files (e.g., Gaussian, ORCA).
+        Uses the ``pymsym`` library for accurate symmetry number
+        determination, with a lookup-table fallback based on
+        ``point_group``.
 
         Common values:
         - C1, Cs, Ci: σ = 1
@@ -939,7 +961,15 @@ class Molecule:
         Gaussian16Output or ORCAOutput classes when available, as these
         are computed by the quantum chemistry software.
         """
-        # Symmetry number lookup table
+        try:
+            return pymsym.get_symmetry_number(
+                self.atomic_numbers, self.positions.tolist()
+            )
+        except (pymsym.Error, pymsym.ArgumentError, AssertionError,
+                ValueError, RuntimeError):
+            pass
+
+        # Fallback: lookup table from point group
         symmetry_numbers = {
             "Kh": 1,    # Spherical (monoatomic)
             "C1": 1,    # No symmetry

@@ -38,6 +38,7 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "pytest_mock>=3.14.0",
+    "pymsym==0.3.4",
 ]
 
 [project.optional-dependencies]
