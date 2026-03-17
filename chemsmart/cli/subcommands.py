@@ -1,3 +1,4 @@
+from chemsmart.cli.database import database
 from chemsmart.cli.gaussian import gaussian
 from chemsmart.cli.iterate import iterate
 from chemsmart.cli.mol import mol
@@ -11,5 +12,6 @@ subcommands = [
     mol,
     nciplot,
     thermochemistry,
+    database,
     iterate,
 ]

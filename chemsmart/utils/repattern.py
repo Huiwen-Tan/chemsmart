@@ -117,6 +117,10 @@ orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
 # filename matches with reactant r1 or r2
 orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
 
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
 
 # filename pattern for gaussian output files
 
@@ -148,6 +152,10 @@ gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
 # we'd want to avoid erroneous partial matches, eg.,
 # freqency (spelling error eg)
 gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
+
+# Pattern to find multiple consecutive spaces in strings
 element_partition_split_pattern = r"[\s:_-]+"
 element_non_alpha_pattern = r"[^A-Za-z]"
 multiple_spaces_pattern = r"\s+"
@@ -162,3 +170,18 @@ pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
 version_pattern = r'(version\s*=\s*")[^"]+(")'
 release_pattern = r'(release\s*=\s*")[^"]+(")'
 safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"
+
+
+# Database query patterns
+# Matches a single condition: field  operator  value
+# value is either a quoted string ('…' or "…") or a bare numeric token.
+query_condition_pattern = (
+    r"(\w+)"  # field name
+    r"\s*(==|<=|>=|!=|~|<|>|=)\s*"  # operator
+    r"('(?:[^'\\]|\\.)*'"  # single-quoted string value
+    r'|"(?:[^"\\]|\\.)*"'  # double-quoted string value
+    r"|[\w.+\-]+)"  # bare numeric / identifier value
+)
+
+# Split on AND / OR while keeping the keyword
+query_logic_split_pattern = r"\s+(AND|OR)\s+"

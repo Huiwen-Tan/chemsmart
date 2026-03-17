@@ -64,6 +64,14 @@ class Molecule:
         a list of scale factors for (low, medium, high).
     info: dict
         A dictionary containing additional information about the molecule.
+    structure_index_in_file: int | None
+        1-based index of this structure within the source file, if applicable.
+    rotational_symmetry_number: int | None
+        Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
+    mulliken_atomic_charges: dict[str, float] | None
+        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+    is_optimized_structure: bool | None
+        Whether this structure corresponds to an optimized step/final optimized geometry.
     """
 
     def __init__(
@@ -85,6 +93,10 @@ class Molecule:
         vibrational_mode_symmetries=None,
         vibrational_modes=None,
         info=None,
+        structure_index_in_file=None,
+        rotational_symmetry_number=None,
+        mulliken_atomic_charges=None,
+        is_optimized_structure=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -103,7 +115,12 @@ class Molecule:
             # initialise info as empty dict if it is None
             info = dict()
         self.info = info
+        self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
+        self.rotational_symmetry_number = rotational_symmetry_number
+        self.is_optimized_structure = is_optimized_structure
+        self.mulliken_atomic_charges = mulliken_atomic_charges
+        self.rotational_symmetry_number = rotational_symmetry_number
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond
@@ -224,6 +241,17 @@ class Molecule:
         return Symbols.fromsymbols(self.symbols).get_chemical_formula(
             mode="hill", empirical=True
         )
+
+    @property
+    def elements(self):
+        return list(set(self.symbols))
+
+    @property
+    def element_counts(self):
+        counts = {}
+        for s in self.symbols:
+            counts[s] = counts.get(s, 0) + 1
+        return counts
 
     @property
     def mass(self):
@@ -527,7 +555,7 @@ class Molecule:
         """
         Check if molecule is a ring or not.
         """
-        return Chem.GetSymmSSSR(self.to_rdkit()) != []
+        return len(Chem.GetSymmSSSR(self.to_rdkit())) > 0
 
     @property
     def is_monoatomic(self):
@@ -868,6 +896,17 @@ class Molecule:
                 return_list=return_list,
             )
 
+        if basename.endswith(".db"):
+            from chemsmart.assembler.utils import is_chemsmart_database
+
+            if is_chemsmart_database(filepath):
+                return cls._read_database_file(
+                    filepath=filepath,
+                    index=index,
+                    return_list=return_list,
+                    **kwargs,
+                )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -988,6 +1027,39 @@ class Molecule:
         chemdraw_file = CDXFile(filename=filepath)
         return chemdraw_file.get_molecules(
             index=index, return_list=return_list
+        )
+
+    @classmethod
+    def _read_database_file(
+        cls,
+        filepath,
+        index="-1",
+        return_list=False,
+        record_index=None,
+        record_id=None,
+    ):
+        """Read molecules from a chemsmart database file (.db).
+
+        Args:
+            filepath (str): Path to the .db file.
+            index (str or int): Molecule index within the selected record(s).
+                Uses 1-based indexing. ``"-1"`` for the last molecule,
+                ``":"`` for all molecules.
+            return_list (bool): If True, always return a list.
+            record_index (int or None): 1-based record index to select.
+            record_id (str or None): Record ID (or prefix) to select.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from the database.
+        """
+        from chemsmart.io.database import DatabaseFile
+
+        database_file = DatabaseFile(filename=filepath)
+        return database_file.get_molecules(
+            index=index,
+            return_list=return_list,
+            record_index=record_index,
+            record_id=record_id,
         )
 
     # @staticmethod
