@@ -2,14 +2,17 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
 
+from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
@@ -24,6 +27,41 @@ from chemsmart.jobs.mol.runner import (
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.settings.server import Server
+
+
+############ CLI Fixtures ##################
+@pytest.fixture
+def make_cli_ctx_obj():
+    """Factory for the minimal Click context object."""
+
+    def _make(jobrunner):
+        return {"jobrunner": jobrunner}
+
+    return _make
+
+
+@pytest.fixture
+def run_gaussian_and_capture_settings():
+    """Run the gaussian CLI with a patched job class and capture settings."""
+
+    def _run(job_class_path, cli_args, ctx_obj):
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings
+
+    return _run
 
 
 @pytest.fixture()
@@ -60,18 +98,6 @@ def chemsmart_templates_config(mocker):
     mocker.patch("chemsmart.settings.executable.user_settings", new_settings)
 
     return template_dir
-
-
-# each test runs on cwd to its temp dir
-# @pytest.fixture(autouse=True)
-# def go_to_tmpdir(request):
-#     # Get the fixture dynamically by its name.
-#     tmpdir = request.getfixturevalue("tmpdir")
-#     # ensure local test created packages can be imported
-#     sys.path.insert(0, str(tmpdir))
-#     # Chdir only for the duration of the test.
-#     with tmpdir.as_cwd():
-#         yield
 
 
 ############ Gaussian Fixtures ##################
@@ -1788,4 +1814,142 @@ def iterate_expected_output_file(iterate_expected_output_directory):
     return os.path.join(
         iterate_expected_output_directory,
         "integration_iterate_SLSQP_lagrange_multipliers_96_6.xyz",
+    )
+
+
+# ── InChIKey test data ──
+@pytest.fixture()
+def inchikey_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "inchikey")
+
+
+@pytest.fixture()
+def inchikey_normal_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "normal_testing",
+        "inchikey_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_r_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_s_enantiomer_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "enantiomer_testing",
+        "inchikey_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c3_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def inchikey_large_molecule_c2_file(inchikey_test_directory):
+    return os.path.join(
+        inchikey_test_directory,
+        "large_molecule_testing",
+        "inchikey_large_molecule_c2.xyz",
+    )
+
+
+# ── CXSMILES test data ──
+@pytest.fixture()
+def cxsmiles_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "cxsmiles")
+
+
+@pytest.fixture()
+def cxsmiles_normal_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "normal_testing",
+        "rotamer_normal_testing.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_r_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_enantiomer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "enantiomer_testing",
+        "rotamer_s_enantiomer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_r_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_r_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_s_rotamer_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "rotamer_testing",
+        "cxsmiles_s_rotamer.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c2.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_large_molecule_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "rotamer_large_molecule_c3.xyz",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c2_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c2.txt",
+    )
+
+
+@pytest.fixture()
+def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
+    return os.path.join(
+        cxsmiles_test_directory,
+        "large_molecule_testing",
+        "expected_cxsmiles_c3.txt",
     )
