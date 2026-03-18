@@ -396,6 +396,7 @@ class ORCAJobSettings(MolecularJobSettings):
             ORCAJobSettings: Settings populated from the database record.
         """
         from chemsmart.assembler.database import Database
+        from chemsmart.assembler.utils import resolve_record
 
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"Database file not found: {filepath}")
@@ -403,18 +404,15 @@ class ORCAJobSettings(MolecularJobSettings):
         db = Database(filepath)
 
         # Resolve the target record
-        if record_index is not None:
-            record = db.get_record(record_index=record_index)
-        elif record_id is not None:
-            full_id = db.get_record_by_partial_id(record_id)
-            record = db.get_record(record_id=full_id)
-        else:
-            raise ValueError(
-                "Either record_index or record_id must be provided to select "
-                "a record from the database."
+        try:
+            record = resolve_record(
+                db,
+                record_index=record_index,
+                record_id=record_id,
+                return_list=False,
             )
-
-        if record is None:
+        except ValueError as e:
+            logger.warning(str(e))
             return None
 
         meta = record.get("meta", {})

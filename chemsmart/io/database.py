@@ -3,6 +3,7 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.assembler.database import Database
+from chemsmart.assembler.utils import resolve_record
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
 
@@ -70,17 +71,13 @@ class DatabaseFile(FileMixin):
         db = Database(self.filename)
 
         # Resolve record selection
-        if record_index is not None:
-            record = db.get_record(record_index=record_index)
-            if record is None:
-                raise ValueError(f"No record found with index {record_index}.")
-            records = [record]
-        elif record_id is not None:
-            full_id = db.get_record_by_partial_id(record_id)
-            record = db.get_record(record_id=full_id)
-            if record is None:
-                raise ValueError(f"No record found with ID '{record_id}'.")
-            records = [record]
+        if record_index is not None or record_id is not None:
+            records = resolve_record(
+                db,
+                record_index=record_index,
+                record_id=record_id,
+                return_list=True,
+            )
         else:
             records = db.get_all_records()
 

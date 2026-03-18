@@ -218,3 +218,34 @@ def standardize_basis_set(basis):
     if basis.startswith("def2-"):
         return basis.replace("def2-", "def2", 1)
     return basis
+
+
+def resolve_record(db, record_index=None, record_id=None, return_list=True):
+    """Resolve a single record from the database by index or ID.
+
+    This utility function consolidates the common pattern of resolving
+    a record by either index or ID, with proper validation and error handling.
+
+    Args:
+        db: Database instance (from chemsmart.assembler.database.Database).
+        record_index (int, optional): 1-based record index.
+        record_id (str, optional): Record ID or unique prefix.
+        return_list (bool): If True, return [record] (for consistency with
+            get_all_records). If False, return record directly.
+    """
+    if record_index is not None:
+        record = db.get_record(record_index=record_index)
+        if record is None:
+            raise ValueError(f"No record found at index {record_index}.")
+    elif record_id is not None:
+        full_id = db.get_record_by_partial_id(record_id)
+        record = db.get_record(record_id=full_id)
+        if record is None:
+            raise ValueError(f"No record found with ID '{record_id}'.")
+    else:
+        raise ValueError(
+            "Either record_index or record_id must be provided to select "
+            "a record from the database."
+        )
+
+    return [record] if return_list else record
