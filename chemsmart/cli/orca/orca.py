@@ -332,10 +332,10 @@ def orca(
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
     elif filename.endswith(".db"):
-        job_settings = ORCAJobSettings.default()
-        logger.info(
-            f"Using default ORCA settings for database file: {filename}"
+        job_settings = ORCAJobSettings.from_database(
+            filename, record_index=record_index, record_id=record_id
         )
+        logger.info(f"Loaded ORCA settings from database file: {filename}")
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"

@@ -591,12 +591,16 @@ def gaussian(
             f"No filename is supplied and Gaussian default settings are used:\n"
             f"{job_settings.__dict__} "
         )
-    elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
+    elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
+    elif filename.endswith(".db"):
+        job_settings = GaussianJobSettings.from_database(
+            filename, record_index=record_index, record_id=record_id
+        )
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
-    #  ".cif", ".traj", ".gro", ".db")):
+    #  ".cif", ".traj", ".gro")):
     else:
         job_settings = GaussianJobSettings.default()
     # else:

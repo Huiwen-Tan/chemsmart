@@ -381,6 +381,81 @@ class GaussianJobSettings(MolecularJobSettings):
         return settings
 
     @classmethod
+    def from_database(cls, filepath, record_index=None, record_id=None):
+        """Create Gaussian settings from a chemsmart database file (.db).
+
+        Reads the specified record and extracts charge,
+        multiplicity, functional, basis, solvent, and jobtype so that
+        the returned settings object mirrors what ``from_logfile`` would
+        produce for the equivalent ``.log`` file.
+
+        Args:
+            filepath (str): Path to the ``.db`` file.
+            record_index (int, optional): 1-based record index.
+            record_id (str, optional): Record ID (or unique prefix).
+
+        Returns:
+            GaussianJobSettings: Settings populated from the database record.
+        """
+        from chemsmart.assembler.database import Database
+
+        if not os.path.isfile(filepath):
+            raise FileNotFoundError(f"Database file not found: {filepath}")
+
+        db = Database(filepath)
+
+        # Resolve the target record
+        if record_index is not None:
+            record = db.get_record(record_index=record_index)
+        elif record_id is not None:
+            full_id = db.get_record_by_partial_id(record_id)
+            record = db.get_record(record_id=full_id)
+        else:
+            raise ValueError(
+                "Either record_index or record_id must be provided to select "
+                "a record from the database."
+            )
+
+        if record is None:
+            return None
+
+        meta = record.get("meta", {})
+        molecules = record.get("molecules", [])
+
+        # Extract charge/multiplicity from the last molecule in the record
+        charge = None
+        multiplicity = None
+        if molecules:
+            last_mol = molecules[-1]
+            charge = last_mol.get("charge")
+            multiplicity = last_mol.get("multiplicity")
+
+        settings = cls.default()
+        settings.charge = charge
+        settings.multiplicity = multiplicity
+
+        if meta.get("functional") is not None:
+            settings.functional = meta["functional"]
+        if meta.get("basis") is not None:
+            settings.basis = meta["basis"]
+        if meta.get("jobtype") is not None:
+            settings.jobtype = meta["jobtype"]
+        if meta.get("solvent_model") is not None:
+            settings.solvent_model = meta["solvent_model"]
+        if meta.get("solvent_id") is not None:
+            settings.solvent_id = meta["solvent_id"]
+        if meta.get("custom_solvent") is not None:
+            settings.custom_solvent = meta["custom_solvent"]
+
+        settings.title = f"Job prepared from chemsmart database {os.path.basename(filepath)}"
+        logger.info(
+            f"Created GaussianJobSettings from database: "
+            f"charge={charge}, multiplicity={multiplicity}, "
+            f"functional={settings.functional}, basis={settings.basis}"
+        )
+        return settings
+
+    @classmethod
     def from_outfile(cls, filename):
         """
         Create Gaussian settings from an ORCA .out output file.
