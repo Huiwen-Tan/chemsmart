@@ -10,8 +10,8 @@ import json
 import logging
 import os
 
-from chemsmart.assembler.database import Database
-from chemsmart.assembler.utils import convert_numpy, resolve_record
+from chemsmart.database.database import Database
+from chemsmart.database.utils import convert_numpy, resolve_record
 
 logger = logging.getLogger(__name__)
 

@@ -2,8 +2,8 @@ from functools import cached_property
 
 import numpy as np
 
-from chemsmart.assembler.database import Database
-from chemsmart.assembler.utils import resolve_record
+from chemsmart.database.database import Database
+from chemsmart.database.utils import resolve_record
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
 

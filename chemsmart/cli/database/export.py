@@ -4,7 +4,7 @@ import os
 
 import click
 
-from chemsmart.assembler.export import CSV_OPTIONAL_COLUMNS, DatabaseExporter
+from chemsmart.database.export import CSV_OPTIONAL_COLUMNS, DatabaseExporter
 from chemsmart.utils.cli import MyCommand
 
 from .database import database

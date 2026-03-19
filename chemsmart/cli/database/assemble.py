@@ -3,9 +3,9 @@ import os
 
 import click
 
-from chemsmart.assembler.assemble import SingleFileAssembler
-from chemsmart.assembler.database import Database
 from chemsmart.cli.job import click_output_folder_options
+from chemsmart.database.assemble import SingleFileAssembler
+from chemsmart.database.database import Database
 from chemsmart.io.folder import BaseFolder
 from chemsmart.utils.cli import MyCommand
 

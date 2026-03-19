@@ -4,7 +4,7 @@ import os
 
 import click
 
-from chemsmart.assembler.inspect import DatabaseInspector
+from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.utils.cli import MyCommand
 
 from .database import database

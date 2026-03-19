@@ -14,8 +14,8 @@ import logging
 from functools import cached_property
 
 from chemsmart import __version__ as chemsmart_version
-from chemsmart.assembler.records import AssembledRecord
-from chemsmart.assembler.utils import (
+from chemsmart.database.records import AssembledRecord
+from chemsmart.database.utils import (
     canonical_geometry_string,
     file_size,
     get_record_id,

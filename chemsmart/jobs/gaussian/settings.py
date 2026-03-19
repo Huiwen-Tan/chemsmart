@@ -397,8 +397,8 @@ class GaussianJobSettings(MolecularJobSettings):
         Returns:
             GaussianJobSettings: Settings populated from the database record.
         """
-        from chemsmart.assembler.database import Database
-        from chemsmart.assembler.utils import resolve_record
+        from chemsmart.database.database import Database
+        from chemsmart.database.utils import resolve_record
 
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"Database file not found: {filepath}")

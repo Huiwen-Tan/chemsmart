@@ -227,7 +227,7 @@ def resolve_record(db, record_index=None, record_id=None, return_list=True):
     a record by either index or ID, with proper validation and error handling.
 
     Args:
-        db: Database instance (from chemsmart.assembler.database.Database).
+        db: Database instance (from chemsmart.database.database.Database).
         record_index (int, optional): 1-based record index.
         record_id (str, optional): Record ID or unique prefix.
         return_list (bool): If True, return [record] (for consistency with
