@@ -4,7 +4,7 @@ import os
 
 import click
 
-from chemsmart.assembler.query import DatabaseQuery
+from chemsmart.database.query import DatabaseQuery
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.io import resolve_output_path
 

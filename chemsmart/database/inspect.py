@@ -7,8 +7,8 @@ import logging
 import os
 import sqlite3
 
-from chemsmart.assembler.database import Database
-from chemsmart.assembler.utils import (
+from chemsmart.database.database import Database
+from chemsmart.database.utils import (
     bool_to_str,
     format_energy,
     format_float,

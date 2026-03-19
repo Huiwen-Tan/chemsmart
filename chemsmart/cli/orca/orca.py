@@ -14,9 +14,12 @@ import os
 import click
 
 from chemsmart.cli.job import (
+    build_database_kwargs,
+    click_database_record_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
+    validate_database_options,
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
@@ -414,6 +417,7 @@ def click_orca_jobtype_options(f):
 @click_orca_options
 @click_filename_options
 @click_file_label_and_index_options
+@click_database_record_options
 @click_orca_settings_options
 @click_orca_solvent_group_options
 @click_pubchem_options
@@ -443,6 +447,8 @@ def orca(
     mdci_cutoff,
     mdci_density,
     index,
+    record_index,
+    record_id,
     additional_route_parameters,
     forces,
     remove_solvent,
@@ -487,6 +493,11 @@ def orca(
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+    elif filename.endswith(".db"):
+        job_settings = ORCAJobSettings.from_database(
+            filename, record_index=record_index, record_id=record_id
+        )
+        logger.info(f"Loaded ORCA settings from database file: {filename}")
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
@@ -586,7 +597,9 @@ def orca(
             keywords += ("solventfilename",)
 
     # obtain molecule structure from file or PubChem
+    validate_database_options(record_index, record_id)
     molecules = None
+    is_database_file = False
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\n"
@@ -599,9 +612,20 @@ def orca(
         )
 
     if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
+        is_database_file = filename.endswith(".db")
+        if is_database_file:
+            db_kwargs = build_database_kwargs(record_index, record_id)
+            file_index = index if index is not None else "-1"
+            molecules = Molecule.from_filepath(
+                filepath=filename,
+                index=file_index,
+                return_list=True,
+                **db_kwargs,
+            )
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
         assert (
             molecules is not None
         ), f"Could not obtain molecule from {filename}!"
@@ -634,7 +658,7 @@ def orca(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None:
+    if index is not None and not is_database_file:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

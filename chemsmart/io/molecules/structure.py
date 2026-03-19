@@ -897,7 +897,7 @@ class Molecule:
             )
 
         if basename.endswith(".db"):
-            from chemsmart.assembler.utils import is_chemsmart_database
+            from chemsmart.database.utils import is_chemsmart_database
 
             if is_chemsmart_database(filepath):
                 return cls._read_database_file(

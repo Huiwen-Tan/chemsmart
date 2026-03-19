@@ -11,6 +11,36 @@ import click
 import numpy as np
 
 
+def validate_database_options(record_index, record_id):
+    """Validate mutually exclusive database record options.
+
+    Raises:
+        click.UsageError: If both ``--ri`` and ``--rid`` are provided.
+    """
+    if record_index is not None and record_id is not None:
+        raise click.UsageError(
+            "--ri/--record-index and --rid/--record-id are mutually "
+            "exclusive. Please specify only one of them."
+        )
+
+
+def build_database_kwargs(record_index, record_id):
+    """Build keyword arguments for ``Molecule.from_filepath`` when reading
+    a database file.
+
+    Returns:
+        dict: Extra kwargs (``record_index``, ``record_id``) to pass through
+        to ``DatabaseFile.get_molecules``.  Empty dict when no database
+        options are active.
+    """
+    kwargs = {}
+    if record_index is not None:
+        kwargs["record_index"] = record_index
+    if record_id is not None:
+        kwargs["record_id"] = record_id
+    return kwargs
+
+
 def click_job_options(f):
     """
     Common job control options for all job types.
@@ -199,6 +229,39 @@ def click_filename_options(f):
     return wrapper_common_options
 
 
+def click_database_record_options(f):
+    """CLI options for selecting records from a chemsmart database file.
+
+    These options only take effect when the input file (``-f``) is a
+    chemsmart ``.db`` database.  ``--ri`` and ``--rid`` are mutually
+    exclusive; if neither is given every record in the database is used.
+    """
+
+    @click.option(
+        "--ri",
+        "--record-index",
+        "record_index",
+        type=int,
+        default=None,
+        help="1-based record index inside a chemsmart database. "
+        "Only used when -f points to a .db file.",
+    )
+    @click.option(
+        "--rid",
+        "--record-id",
+        "record_id",
+        type=str,
+        default=None,
+        help="Record ID (or unique prefix) inside a chemsmart database. "
+        "Only used when -f points to a .db file.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_file_label_and_index_options(f):
     """Common click options for specifying file
     label, append-label, and index via CLI."""
@@ -226,7 +289,9 @@ def click_file_label_and_index_options(f):
         default=None,
         help="Index of molecules to use; 1-based indices. "
         "If not specified, all molecules are passed to the job. "
-        "Jobs that need only one molecule will use the last one.",
+        "Jobs that need only one molecule will use the last one. "
+        "For database files (.db), this selects the molecule index "
+        "within each record.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

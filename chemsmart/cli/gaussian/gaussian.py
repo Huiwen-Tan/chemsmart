@@ -5,9 +5,12 @@ import os
 import click
 
 from chemsmart.cli.job import (
+    build_database_kwargs,
+    click_database_record_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
+    validate_database_options,
 )
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
@@ -536,6 +539,7 @@ def click_gaussian_qmmm_options(f):
 @click_gaussian_options
 @click_filename_options
 @click_file_label_and_index_options
+@click_database_record_options
 @click_gaussian_settings_options
 @click_gaussian_solvent_group_options
 @click_pubchem_options
@@ -553,6 +557,8 @@ def gaussian(
     basis,
     semiempirical,
     index,
+    record_index,
+    record_id,
     additional_opt_options,
     additional_route_parameters,
     append_additional_info,
@@ -585,12 +591,16 @@ def gaussian(
             f"No filename is supplied and Gaussian default settings are used:\n"
             f"{job_settings.__dict__} "
         )
-    elif filename.endswith((".com", "gjf", ".inp", ".out", ".log")):
+    elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
+    elif filename.endswith(".db"):
+        job_settings = GaussianJobSettings.from_database(
+            filename, record_index=record_index, record_id=record_id
+        )
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
-    #  ".cif", ".traj", ".gro", ".db")):
+    #  ".cif", ".traj", ".gro")):
     else:
         job_settings = GaussianJobSettings.default()
     # else:
@@ -659,7 +669,9 @@ def gaussian(
             keywords += ("additional_solvent_options",)
 
     # obtain molecule structure
+    validate_database_options(record_index, record_id)
     molecules = None
+    is_database_file = False
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\n"
@@ -672,9 +684,20 @@ def gaussian(
         )
 
     if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
-        )
+        is_database_file = filename.endswith(".db")
+        if is_database_file:
+            db_kwargs = build_database_kwargs(record_index, record_id)
+            file_index = index if index is not None else "-1"
+            molecules = Molecule.from_filepath(
+                filepath=filename,
+                index=file_index,
+                return_list=True,
+                **db_kwargs,
+            )
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
         assert (
             molecules is not None
         ), f"Could not obtain molecule from {filename}!"
@@ -707,7 +730,7 @@ def gaussian(
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
     molecule_indices = None
-    if index is not None:
+    if index is not None and not is_database_file:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

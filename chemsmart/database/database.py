@@ -11,8 +11,8 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from chemsmart.assembler.records import AssembledRecord
-from chemsmart.assembler.utils import (
+from chemsmart.database.records import AssembledRecord
+from chemsmart.database.utils import (
     convert_numpy,
     from_json,
     standardize_basis_set,
