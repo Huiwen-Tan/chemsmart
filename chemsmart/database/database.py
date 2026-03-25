@@ -15,7 +15,6 @@ from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
     convert_numpy,
     from_json,
-    standardize_basis_set,
     to_json,
 )
 
@@ -220,10 +219,6 @@ class Database:
         results = record_dict.get("results", {})
         provenance = record_dict.get("provenance", {})
 
-        # Standardize basis set name (e.g., def2-svp -> def2svp)
-        basis = meta.get("basis")
-        if basis:
-            basis = standardize_basis_set(basis)
         conn.execute(
             """
             INSERT OR REPLACE INTO records (
@@ -258,7 +253,7 @@ class Database:
                 program,
                 # Meta
                 meta.get("functional"),
-                basis,  # Use standardized basis
+                meta.get("basis"),
                 meta.get("num_basis_functions"),
                 meta.get("spin"),
                 meta.get("jobtype"),

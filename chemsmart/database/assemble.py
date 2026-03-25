@@ -22,6 +22,7 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    standardize_basis_set,
     utcnow_iso,
 )
 from chemsmart.io.gaussian.output import Gaussian16Output
@@ -104,9 +105,13 @@ class BaseAssembler:
 
     def get_meta_data(self):
         basis = self.output.basis
+        if is_custom_basis(basis):
+            basis = "customized_basis"
+        else:
+            basis = standardize_basis_set(basis)
         meta_data = {
             "functional": self.output.functional,
-            "basis": "customized_basis" if is_custom_basis(basis) else basis,
+            "basis": basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,
             "jobtype": self.output.jobtype,
@@ -115,14 +120,12 @@ class BaseAssembler:
         }
         if self.output.solvent_on:
             solvent_id = self.output.solvent_id
+            if is_custom_solvent(solvent_id):
+                solvent_id = "customized_solvent"
             meta_data.update(
                 {
                     "solvent_model": self.output.solvent_model,
-                    "solvent_id": (
-                        "customized_solvent"
-                        if is_custom_solvent(solvent_id)
-                        else solvent_id
-                    ),
+                    "solvent_id": solvent_id,
                     "custom_solvent": self.output.custom_solvent,
                 }
             )
