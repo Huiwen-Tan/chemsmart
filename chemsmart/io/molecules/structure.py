@@ -1,5 +1,6 @@
 import ast
 import copy
+import hashlib
 import inspect
 import logging
 import os
@@ -18,7 +19,7 @@ from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
 from chemsmart.io.molecules import get_bond_cutoff
-from chemsmart.utils.geometry import is_collinear
+from chemsmart.utils.geometry import canonicalize_positions, is_collinear
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import file_cache, string2index_1based
@@ -313,6 +314,56 @@ class Molecule:
         Compute the center of mass of the molecule.
         """
         return np.average(self.positions, axis=0, weights=self.masses)
+
+    @cached_property
+    def canonical_positions(self):
+        """Canonical atomic positions.
+        The positions are translated to the centre of mass and rotated into
+        the principal-axes frame of the moment-of-inertia tensor, with a
+        deterministic sign convention applied to each axis. The result is
+        invariant under translation and rotation of the original coordinates.
+        """
+        return canonicalize_positions(self.masses, self.positions)
+
+    @cached_property
+    def canonical_geometry(self):
+        """Canonical string representation of the molecular geometry.
+        Atoms are sorted lexicographically by (symbol, x, y, z) after
+        canonicalization, yielding a representation that is invariant under
+        translation, rotation and atom-index permutation.
+        """
+        decimals = 6
+        rounded = np.round(self.canonical_positions, decimals=decimals)
+        atoms = sorted(zip(self.chemical_symbols, rounded.tolist()))
+        parts = [
+            f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
+            for sym, (x, y, z) in atoms
+        ]
+        return ";".join(parts)
+
+    @cached_property
+    def structure_id(self):
+        """Unique structural identifier (SHA-256 hex digest).
+        Computed from canonical_geometry, charge and multiplicity.
+        Two molecules with identical canonicalized geometry
+        (up to translation/rotation/atom-ordering) and electronic
+        state will produce the same structure_id.
+        """
+        components = [
+            self.canonical_geometry,
+            str(self.charge),
+            str(self.multiplicity),
+        ]
+        payload = "|".join(components)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    @property
+    def structure_label(self):
+        """Human-readable short label for the structure.
+        Combines the empirical formula with the first 12 characters of
+        structure_id, e.g. "C6H6-a1b2c3d4e5f6".
+        """
+        return f"{self.empirical_formula}-{self.structure_id[:12]}"
 
     @property
     def chemical_formula(self):
