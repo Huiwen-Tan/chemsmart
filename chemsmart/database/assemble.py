@@ -16,7 +16,6 @@ from functools import cached_property
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
-    canonical_geometry_string,
     file_size,
     get_record_id,
     is_custom_basis,
@@ -83,16 +82,12 @@ class BaseAssembler:
 
         # Use the last molecule (typically the optimized structure) for the ID
         ref_mol = self.molecules_list[-1]
-        canon_geom = canonical_geometry_string(
-            ref_mol.chemical_symbols, ref_mol.positions
-        )
         record_id = get_record_id(
-            canonical_geometry=canon_geom,
-            charge=ref_mol.charge,
-            multiplicity=ref_mol.multiplicity,
+            structure_id=ref_mol.structure_id,
             program=provenance.get("program", "unknown"),
             functional=meta.get("functional", ""),
             basis=meta.get("basis", ""),
+            jobtype=meta.get("jobtype", ""),
         )
 
         return AssembledRecord(
@@ -144,6 +139,8 @@ class BaseAssembler:
             "is_optimized_structure": mol.is_optimized_structure,
             "charge": mol.charge,
             "multiplicity": mol.multiplicity,
+            "structure_id": mol.structure_id,
+            "structure_label": mol.structure_label,
             "chemical_symbols": mol.chemical_symbols,
             "positions": mol.positions,
             "chemical_formula": mol.chemical_formula,

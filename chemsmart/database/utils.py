@@ -50,61 +50,37 @@ def is_custom_solvent(solvent_id):
     return solvent_id.strip().lower() in CUSTOM_SOLVENT_KEYWORDS
 
 
-def get_record_id(
-    canonical_geometry, charge, multiplicity, program, functional, basis
-):
-    """Generate a stable record ID from molecular identity fields.
+def get_record_id(structure_id, program, functional, basis, jobtype):
+    """Generate a stable record ID from molecular identity and calculation fields.
 
-    The hash is computed from canonical geometry (sorted symbols + rounded
-    positions), charge, multiplicity, program, functional, and basis set.
-    This ensures that the same calculation always produces the same ID
-    regardless of file path.
+    The hash is computed from the molecule's ``structure_id`` (which already
+    encodes canonical geometry, charge and multiplicity) together with the
+    computational method descriptors.  This ensures that:
+
+    * The same structure computed with the same method and job type always
+      produces the same ``record_id``.
+    * Different structures, methods or job types always produce different IDs.
 
     Args:
-        canonical_geometry: String representation of the molecular geometry
-            (e.g. sorted chemical symbols + rounded positions).
-        charge: Molecular charge.
-        multiplicity: Spin multiplicity.
-        program: Computational chemistry program name.
+        structure_id: SHA-256 hex digest of the canonical geometry, charge
+            and multiplicity (from ``Molecule.structure_id``).
+        program: Computational chemistry program name (e.g. "gaussian").
         functional: DFT functional or method.
         basis: Basis set.
+        jobtype: Job type specification.
 
     Returns:
         SHA-256 hex digest string.
     """
     components = [
-        str(canonical_geometry),
-        str(charge),
-        str(multiplicity),
+        str(structure_id),
         str(program),
         str(functional),
         str(basis),
+        str(jobtype),
     ]
     payload = "|".join(components)
     return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def canonical_geometry_string(chemical_symbols, positions, decimals=6):
-    """Build a canonical string representation of molecular geometry.
-
-    Atoms are sorted by (symbol, x, y, z) so that the representation is
-    invariant to input ordering.
-
-    Args:
-        chemical_symbols: List of element symbols.
-        positions: Nx3 array-like of Cartesian coordinates.
-        decimals: Number of decimal places for coordinate rounding.
-
-    Returns:
-        Canonical geometry string.
-    """
-    rounded = np.round(np.asarray(positions, dtype=float), decimals=decimals)
-    atoms = sorted(zip(chemical_symbols, rounded.tolist()))
-    parts = [
-        f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
-        for sym, (x, y, z) in atoms
-    ]
-    return ";".join(parts)
 
 
 def utcnow_iso():

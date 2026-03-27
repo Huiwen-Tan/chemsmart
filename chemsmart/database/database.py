@@ -139,6 +139,8 @@ class Database:
                     is_optimized_structure INTEGER,
                     charge INTEGER,
                     multiplicity INTEGER,
+                    structure_id TEXT,
+                    structure_label TEXT,
                     chemical_symbols_json TEXT,
                     positions_json TEXT,
                     chemical_formula TEXT,
@@ -178,6 +180,9 @@ class Database:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_chemical_formula ON molecules(chemical_formula)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_structure_id ON molecules(structure_id)"
             )
             conn.commit()
             logger.debug(f"Created database at {self.db_file}.")
@@ -325,6 +330,7 @@ class Database:
                 INSERT INTO molecules (
                     record_id, index_in_record, structure_index_in_file,
                     is_optimized_structure, charge, multiplicity,
+                    structure_id, structure_label,
                     chemical_symbols_json, positions_json, chemical_formula,
                     number_of_atoms, mass, elements_json, element_counts_json,
                     center_of_mass_json, is_chiral, is_ring, is_aromatic, is_monoatomic,
@@ -335,7 +341,7 @@ class Database:
                     vibrational_modes_json
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 (
@@ -345,6 +351,8 @@ class Database:
                     1 if mol.get("is_optimized_structure") else 0,
                     mol.get("charge"),
                     mol.get("multiplicity"),
+                    mol.get("structure_id"),
+                    mol.get("structure_label"),
                     to_json(mol.get("chemical_symbols")),
                     to_json(mol.get("positions")),
                     mol.get("chemical_formula"),
