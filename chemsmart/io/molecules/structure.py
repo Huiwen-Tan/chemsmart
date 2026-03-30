@@ -331,8 +331,19 @@ class Molecule:
         Atoms are sorted lexicographically by (symbol, x, y, z) after
         canonicalization, yielding a representation that is invariant under
         translation, rotation and atom-index permutation.
+
+        Note on precision: coordinates are rounded to 4 decimal places
+        (~1e-4 Å) to absorb sub-threshold numerical noise in the canonical
+        positions (e.g. floating-point differences across platforms or
+        minor coordinate perturbations). This is an engineering compromise:
+        in rare cases (e.g. perfectly symmetric spherical-top molecules),
+        the canonical frame is not uniquely defined due to degeneracy of the
+        inertia tensor. As a result, canonical_positions may differ across
+        input orientations. While rounding often mitigates this in practice,
+        canonical_geometry (and thus structure_id) is not strictly guaranteed
+        to be invariant in such cases.
         """
-        decimals = 6
+        decimals = 4
         rounded = np.round(self.canonical_positions, decimals=decimals)
         atoms = sorted(zip(self.chemical_symbols, rounded.tolist()))
         parts = [

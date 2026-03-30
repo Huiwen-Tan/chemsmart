@@ -1953,3 +1953,79 @@ def cxsmiles_expected_large_c3_file(cxsmiles_test_directory):
         "large_molecule_testing",
         "expected_cxsmiles_c3.txt",
     )
+
+
+############ Canonical Geometry / Structure ID Fixtures ##################
+@pytest.fixture()
+def canonical_test_directory(structure_test_directory):
+    return os.path.join(structure_test_directory, "canonical")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_file(canonical_test_directory):
+    """Formaldehyde (CH2O) in its reference orientation — planar, C2v symmetry."""
+    return os.path.join(canonical_test_directory, "formaldehyde.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_trans_rot_file(canonical_test_directory):
+    """Formaldehyde translated and rotated from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_formaldehyde_perturbed_file(canonical_test_directory):
+    """Formaldehyde with coordinates perturbed at ~1e-7 Å level from canonical_formaldehyde_file."""
+    return os.path.join(canonical_test_directory, "formaldehyde_perturbed.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_file(canonical_test_directory):
+    """Methane (CH4) in its reference orientation — tetrahedral, Td symmetry."""
+    return os.path.join(canonical_test_directory, "methane.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_trans_rot_file(canonical_test_directory):
+    """Methane translated and rotated from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_methane_distorted_file(canonical_test_directory):
+    """Methane with one C-H bond elongated by ~2e-3 Å from canonical_methane_file."""
+    return os.path.join(canonical_test_directory, "methane_distorted.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_file(canonical_test_directory):
+    """3b (C17H17NOS) in its reference orientation — large, low-symmetry (C1) molecule."""
+    return os.path.join(canonical_test_directory, "3b.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_trans_rot_file(canonical_test_directory):
+    """3b translated and rotated from canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_trans_rot.xyz")
+
+
+@pytest.fixture()
+def canonical_3b_permuted_file(canonical_test_directory):
+    """3b with input atom order permuted — same coordinates as canonical_3b_file."""
+    return os.path.join(canonical_test_directory, "3b_permuted.xyz")
+
+
+@pytest.fixture()
+def canonical_r_bromochlorofluoromethane_file(canonical_test_directory):
+    """(R)-Bromochlorofluoromethane — one enantiomer of a chiral CHBrClF molecule."""
+    return os.path.join(
+        canonical_test_directory, "R-Bromochlorofluoromethane.xyz"
+    )
+
+
+@pytest.fixture()
+def canonical_s_bromochlorofluoromethane_file(canonical_test_directory):
+    """(S)-Bromochlorofluoromethane — non-superimposable mirror image of the R enantiomer."""
+    return os.path.join(
+        canonical_test_directory, "S-Bromochlorofluoromethane.xyz"
+    )
