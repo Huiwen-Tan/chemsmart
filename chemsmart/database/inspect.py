@@ -498,6 +498,7 @@ class DatabaseInspector:
     def format_molecule_detail(self):
         """Return a human-readable molecule detail string."""
         record, mol = self.molecule_detail()
+        provenance = record.get("provenance", {})
         lines = []
         lines.append("")
         lines.append(separator("Molecule Detail"))
@@ -505,6 +506,11 @@ class DatabaseInspector:
         # Context
         lines.append(format_kv("Record Index", record.get("record_index")))
         lines.append(format_kv("Record ID", record.get("record_id")))
+        lines.append(
+            format_kv(
+                "Filename", os.path.basename(provenance.get("source_file"))
+            )
+        )
         lines.append(
             format_kv(
                 "Structure Index in File", mol.get("structure_index_in_file")
