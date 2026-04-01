@@ -446,6 +446,45 @@ class Molecule:
         return Chem.MolToCXSmiles(self.to_rdkit())
 
     @cached_property
+    def inchi(self):
+        """Full InChI string for the molecule.
+        Computed via Open Babel (same XYZ-based pipeline as ``inchikey``).
+        Encodes connectivity, hydrogen counts, charge, and stereochemistry
+        in a layered string, e.g. ``InChI=1S/C6H6/c1-2-4-6-5-3-1/h1-6H``.
+        """
+        try:
+            from openbabel import openbabel as ob
+            from openbabel import pybel
+        except ImportError as exc:
+            raise ImportError(
+                "Calculating InChI requires Open Babel. "
+                "Use 'conda install -c conda-forge openbabel' to install."
+            ) from exc
+
+        lines = [str(self.num_atoms), "Created for InChI via Open Babel"]
+        for s, pos in zip(self.symbols, self.positions):
+            lines.append(
+                f"{s:4s} {pos[0]:15.10f} {pos[1]:15.10f} {pos[2]:15.10f}"
+            )
+        xyz_string = "\n".join(lines)
+
+        ob.obErrorLog.SetOutputLevel(ob.obError)
+        try:
+            ob_mol = pybel.readstring("xyz", xyz_string)
+            result = ob_mol.write("inchi").strip()
+        finally:
+            ob.obErrorLog.SetOutputLevel(ob.obWarning)
+
+        return result
+
+    @property
+    def smiles(self):
+        """SMILES string for the molecule (convenience property).
+        Equivalent to calling ``to_smiles()``.
+        """
+        return self.to_smiles()
+
+    @cached_property
     def chemical_symbols(self):
         """
         Return a list of chemical symbols strings
@@ -628,6 +667,47 @@ class Molecule:
         Check if molecule is chiral or not.
         """
         return Chem.FindMolChiralCenters(self.to_rdkit(), force=True) != []
+
+    @property
+    def chiral_centers(self):
+        """Dict mapping 1-based atom index to CIP stereodescriptor.
+
+        Uses RDKit ``FindMolChiralCenters`` with ``includeUnassigned=True``
+        so that atoms whose configuration could not be assigned from the
+        3D geometry are still listed (with descriptor ``"?"``).
+
+        Returns:
+            dict[int, str]: e.g. ``{3: "R", 7: "S"}`` or ``{}`` for
+            achiral molecules.  Keys are 1-based atom indices.
+        """
+        centers = Chem.FindMolChiralCenters(
+            self.to_rdkit(), force=True, includeUnassigned=True
+        )
+        # RDKit returns 0-based indices; convert to 1-based for consistency
+        return {idx + 1: descriptor for idx, descriptor in centers}
+
+    @property
+    def is_multicomponent(self):
+        """True if the molecule consists of more than one disconnected fragment.
+
+        Detects salt forms, solvent complexes, or ion pairs by counting
+        the number of connected components in the molecular graph.
+        """
+        from rdkit.Chem import GetMolFrags
+
+        frags = GetMolFrags(self.to_rdkit())
+        return len(frags) > 1
+
+    @property
+    def num_components(self):
+        """Number of disconnected molecular fragments (components).
+
+        Returns 1 for a normal single-component molecule, >1 for salts,
+        solvent complexes, or ion pairs.
+        """
+        from rdkit.Chem import GetMolFrags
+
+        return len(GetMolFrags(self.to_rdkit()))
 
     @property
     def is_aromatic(self):
