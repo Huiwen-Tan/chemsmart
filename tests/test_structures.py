@@ -480,6 +480,7 @@ class TestMoleculeAdvanced:
         )
 
         assert not mol.is_chiral, "CH4 is not chiral"
+        assert not mol.chiral_centers
         graph = mol.to_graph()
 
         assert isinstance(graph, nx.Graph)
@@ -961,6 +962,7 @@ class TestGraphFeatures:
         )
 
         assert not mol.is_chiral
+        assert not mol.chiral_centers
 
         # H has covalent radius of 0.31 Å from ase.data
 
@@ -1007,6 +1009,7 @@ class TestChemicalFeatures:
         assert len(methyl_3_hexane.bond_orders) == 22
         assert all([i == 1 for i in methyl_3_hexane.bond_orders])
         assert methyl_3_hexane.is_chiral
+        assert methyl_3_hexane.chiral_centers == {1: "R"}
         chiral_mol = Molecule(
             symbols=["C", "Cl", "F", "Br", "I"],
             positions=np.array(
@@ -1056,6 +1059,7 @@ class TestChemicalFeatures:
             1.5,
         ]  # correctly gets bond order of ozone as 1.5
         assert not ozone.is_chiral
+        assert not ozone.chiral_centers
         rdkit_mol = ozone.to_rdkit()
         assert Chem.FindMolChiralCenters(rdkit_mol) == []
         assert ozone.chemical_symbols == ["O", "O", "O"]
@@ -1929,14 +1933,20 @@ def test_qmmm_partition_out_of_range_raises():
     assert "out of range" in str(exc.value)
 
 
-class TestInChIKey:
-    """Tests for Molecule.inchikey property (Open Babel backend)."""
+class TestInChI:
+    """Tests for Molecule.inchi and Molecule.inchikey properties (Open Babel backend)."""
 
+    # InChIKey constants
     EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
     EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
     EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
     EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
     EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+
+    # InChI constants (full InChI strings)
+    EXPECTED_INCHI_NORMAL = "InChI=1S/C4H10O3P/c1-3-6-8(5)7-4-2/h3-4H2,1-2H3"
+    EXPECTED_INCHI_R_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m1/s1"
+    EXPECTED_INCHI_S_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m0/s1"
 
     @staticmethod
     def _load_molecule(filepath):
@@ -1951,31 +1961,36 @@ class TestInChIKey:
         mol = self._load_molecule(inchikey_normal_file)
         for _ in range(3):
             assert mol.inchikey == self.EXPECTED_NORMAL
+            assert mol.inchi == self.EXPECTED_INCHI_NORMAL
 
     def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
         """InChIKey for the R-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_r_enantiomer_file)
         assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_R_ENANTIOMER
 
     def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
         """InChIKey for the S-enantiomer should match the expected value."""
         mol = self._load_molecule(inchikey_s_enantiomer_file)
         assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_S_ENANTIOMER
 
     def test_enantiomers_share_connectivity_layer(
         self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
     ):
         """R and S enantiomers share the same first (connectivity) layer of
-        the InChIKey (identical constitution) but differ in the stereo layer,
+        the InChI and InChIKey (identical constitution) but differ in the stereo layer,
         confirming that Open Babel correctly resolves the axial chirality."""
         mol_r = self._load_molecule(inchikey_r_enantiomer_file)
         mol_s = self._load_molecule(inchikey_s_enantiomer_file)
-        # First 14-character block: same connectivity
+        # First 14-character block: same connectivity in InChIKey
         assert mol_r.inchikey.split("-")[0] == mol_s.inchikey.split("-")[0]
-        # Second block: stereo layer must differ for a chiral pair
+        # Second block: stereo layer must differ for a chiral pair in InChIKey
         assert mol_r.inchikey.split("-")[1] != mol_s.inchikey.split("-")[1]
         # Overall InChIKeys are distinct
         assert mol_r.inchikey != mol_s.inchikey
+        # InChI strings are also distinct (stereo layer differs at /t flag)
+        assert mol_r.inchi != mol_s.inchi
 
     def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
         """InChIKey for a large molecule (c3) should match the expected value."""
@@ -1990,10 +2005,11 @@ class TestInChIKey:
     def test_large_molecules_differ(
         self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
     ):
-        """Two different large molecules should produce different InChIKeys."""
+        """Two different large molecules should produce different InChIKeys and InChI strings."""
         mol_c3 = self._load_molecule(inchikey_large_molecule_c3_file)
         mol_c2 = self._load_molecule(inchikey_large_molecule_c2_file)
         assert mol_c3.inchikey != mol_c2.inchikey
+        assert mol_c3.inchi != mol_c2.inchi
 
 
 class TestCXSMILES:
