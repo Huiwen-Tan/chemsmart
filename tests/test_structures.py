@@ -2216,30 +2216,63 @@ class TestCXSMILES:
         assert mol_c2.cxsmiles != mol_c3.cxsmiles
 
 
-class TestCanonicalGeometryAndStructureID:
-    """Tests for Molecule.canonical_geometry, Molecule.structure_id, and
-    Molecule.structure_label.
+class TestMoleculeAndStructureIdentifiers:
+    """Tests for Molecule.canonical_geometry, Molecule.structure_id,
+    Molecule.structure_label, Molecule.molecule_id, and Molecule.molecule_label.
 
     canonical_geometry: string encoding of the geometry invariant under
         translation, rotation, and atom-index permutation.
     structure_id: SHA-256 hex digest of (canonical_geometry, charge, multiplicity).
-    structure_label: "{empirical_formula}-{structure_id[:12]}".
+    structure_label: "str-{chemical_formula}-{structure_id[:12]}".
+    molecule_id:  Unique chemical species identifier (InChIKey string).
+                  Topology- and stereochemistry-based; geometry-independent.
+    molecule_label: "mol-{chemical_formula}-{molecule_id}".
     """
 
-    # ── Positive tests: same structure → same canonical_geometry / structure_id / structure_label ──
+    # ── Format / determinism ──
 
-    def test_formaldehyde_trans_rot_matches(
+    def test_structure_label_format(self, canonical_formaldehyde_file):
+        """structure_label must follow 'str-{chemical_formula}-{structure_id[:12]}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.structure_label
+            == f"str-{mol.chemical_formula}-{mol.structure_id[:12]}"
+        )
+
+    def test_molecule_label_format(self, canonical_formaldehyde_file):
+        """molecule_label must follow 'mol-{chemical_formula}-{molecule_id}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.molecule_label
+            == f"mol-{mol.chemical_formula}-{mol.molecule_id}"
+        )
+
+    def test_ids_are_deterministic(self, canonical_formaldehyde_file):
+        """Loading the same file twice must give identical structure_id,
+        structure_label, molecule_id, and molecule_label."""
+        mol_a = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_b = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert mol_a.structure_id == mol_b.structure_id
+        assert mol_a.structure_label == mol_b.structure_label
+        assert mol_a.molecule_id == mol_b.molecule_id
+        assert mol_a.molecule_label == mol_b.molecule_label
+
+    # ── Rigid transformations: both ids preserved ──
+
+    def test_rigid_transform_preserves_both_ids_formaldehyde(
         self,
         canonical_formaldehyde_file,
         canonical_formaldehyde_trans_rot_file,
     ):
-        """Translated and rotated formaldehyde (C2v) must give the same
-        canonical_geometry, structure_id, and structure_label."""
+        """Translating and rotating formaldehyde (C2v) must preserve both
+        structure_id and molecule_id."""
         mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
         mol_tr = Molecule.from_filepath(canonical_formaldehyde_trans_rot_file)
         assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
         assert mol_ref.structure_id == mol_tr.structure_id
         assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
 
     @pytest.mark.xfail(
         strict=False,
@@ -2254,38 +2287,53 @@ class TestCanonicalGeometryAndStructureID:
             "symmetric Td coordinates the test would fail."
         ),
     )
-    def test_methane_trans_rot_matches(
+    def test_rigid_transform_preserves_both_ids_methane(
         self, canonical_methane_file, canonical_methane_trans_rot_file
     ):
-        """Translated and rotated methane (Td): canonical_geometry, structure_id,
-        and structure_label should match, but this is not guaranteed for spherical-top
-        molecules."""
+        """Translating and rotating methane (Td, spherical top) should preserve
+        both structure_id and molecule_id (xfail: canonicalization not guaranteed
+        for degenerate inertia tensors)."""
         mol_ref = Molecule.from_filepath(canonical_methane_file)
         mol_tr = Molecule.from_filepath(canonical_methane_trans_rot_file)
         assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
         assert mol_ref.structure_id == mol_tr.structure_id
-        assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
 
-    def test_3b_trans_rot_matches(
+    def test_rigid_transform_preserves_both_ids_3b(
         self, canonical_3b_file, canonical_3b_trans_rot_file
     ):
-        """Translated and rotated 3b (C17H17NOS, 37 atoms) must give the same
-        canonical_geometry, structure_id, and structure_label."""
+        """Translating and rotating 3b (C17H17NOS, C1 symmetry, 37 atoms) must
+        preserve both structure_id and molecule_id."""
         mol_ref = Molecule.from_filepath(canonical_3b_file)
         mol_tr = Molecule.from_filepath(canonical_3b_trans_rot_file)
         assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
         assert mol_ref.structure_id == mol_tr.structure_id
         assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
 
-    def test_formaldehyde_perturbed_matches(
+    def test_atom_permutation_preserves_both_ids(
+        self, canonical_3b_file, canonical_3b_permuted_file
+    ):
+        """Permuting atom input order must preserve both structure_id and
+        molecule_id (invariance to atom-listing order)."""
+        mol_ref = Molecule.from_filepath(canonical_3b_file)
+        mol_perm = Molecule.from_filepath(canonical_3b_permuted_file)
+        assert mol_ref.canonical_geometry == mol_perm.canonical_geometry
+        assert mol_ref.structure_id == mol_perm.structure_id
+        assert mol_ref.structure_label == mol_perm.structure_label
+        assert mol_ref.molecule_id == mol_perm.molecule_id
+        assert mol_ref.molecule_label == mol_perm.molecule_label
+
+    # ── Geometry vs topology: structure_id changes, molecule_id unchanged ──
+
+    def test_sub_threshold_perturbation_preserves_both_ids(
         self,
         canonical_formaldehyde_file,
         canonical_formaldehyde_perturbed_file,
     ):
-        """Formaldehyde with coordinates perturbed at ~1e-7 Å must give the same
-        canonical_geometry, structure_id, and structure_label.
-        The perturbation is well below the 4-decimal-place (1e-4 Å) rounding
-        threshold applied in canonical_geometry."""
+        """A coordinate perturbation of ~1e-7 Å (well below the 1e-4 Å rounding
+        threshold) must preserve both structure_id and molecule_id."""
         mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
         mol_pert = Molecule.from_filepath(
             canonical_formaldehyde_perturbed_file
@@ -2293,41 +2341,54 @@ class TestCanonicalGeometryAndStructureID:
         assert mol_ref.canonical_geometry == mol_pert.canonical_geometry
         assert mol_ref.structure_id == mol_pert.structure_id
         assert mol_ref.structure_label == mol_pert.structure_label
+        assert mol_ref.molecule_id == mol_pert.molecule_id
+        assert mol_ref.molecule_label == mol_pert.molecule_label
 
-    def test_3b_permuted_matches(
-        self, canonical_3b_file, canonical_3b_permuted_file
-    ):
-        """3b with permuted input atom order must give the same canonical_geometry,
-        structure_id, and structure_label, verifying invariance to atom-listing order.
-        """
-        mol_ref = Molecule.from_filepath(canonical_3b_file)
-        mol_perm = Molecule.from_filepath(canonical_3b_permuted_file)
-        assert mol_ref.canonical_geometry == mol_perm.canonical_geometry
-        assert mol_ref.structure_id == mol_perm.structure_id
-        assert mol_ref.structure_label == mol_perm.structure_label
-
-    # ── Negative tests: different structure → different canonical_geometry / structure_id ──
-
-    def test_methane_distorted_differs(
+    def test_geometry_distortion_changes_structure_id_not_molecule_id(
         self, canonical_methane_file, canonical_methane_distorted_file
     ):
-        """Methane with one C-H bond elongated by ~2e-3 Å must give a different
-        canonical_geometry and structure_id.
-        The bond-length change (~2e-3 Å) is 20× larger than the 1e-4 Å
-        rounding threshold, so it is reliably preserved after canonicalization.
-        """
+        """Elongating one C-H bond by ~2e-3 Å must change structure_id
+        (geometry changed) but leave molecule_id unchanged (same topology)."""
         mol_ref = Molecule.from_filepath(canonical_methane_file)
         mol_dist = Molecule.from_filepath(canonical_methane_distorted_file)
         assert mol_ref.canonical_geometry != mol_dist.canonical_geometry
         assert mol_ref.structure_id != mol_dist.structure_id
+        assert mol_ref.structure_label != mol_dist.structure_label
+        assert mol_ref.molecule_id == mol_dist.molecule_id
+        assert mol_ref.molecule_label == mol_dist.molecule_label
 
-    def test_enantiomers_differ(
+    # ── Electronic state: structure_id changes, molecule_id unchanged ──
+
+    def test_different_electronic_state_changes_structure_id_not_molecule_id(
+        self, canonical_formaldehyde_file
+    ):
+        """The same geometry with different charge or multiplicity must produce
+        a different structure_id (electronic state is part of the structure hash)
+        but the same molecule_id (topology is unchanged)."""
+        mol_neutral = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_cation = Molecule(
+            symbols=mol_neutral.symbols,
+            positions=mol_neutral.positions,
+            charge=1,
+            multiplicity=2,
+        )
+        assert mol_neutral.structure_id != mol_cation.structure_id
+        assert mol_neutral.structure_label != mol_cation.structure_label
+        assert mol_neutral.molecule_id == mol_cation.molecule_id
+        assert mol_neutral.molecule_label == mol_cation.molecule_label
+
+    # ── Stereochemistry: both ids differ for enantiomers ──
+
+    def test_enantiomers_differ_in_both_ids(
         self,
         canonical_r_bromochlorofluoromethane_file,
         canonical_s_bromochlorofluoromethane_file,
     ):
-        """R- and S-bromochlorofluoromethane are non-superimposable mirror images
-        and must give different canonical_geometry and structure_id values."""
+        """R- and S-bromochlorofluoromethane are non-superimposable mirror images:
+        both structure_id (different geometry) and molecule_id (InChIKey encodes
+        stereochemistry) must differ.
+        The first InChIKey block (connectivity layer) is shared; the stereo
+        layer (second block) differs."""
         mol_r = Molecule.from_filepath(
             canonical_r_bromochlorofluoromethane_file
         )
@@ -2336,30 +2397,31 @@ class TestCanonicalGeometryAndStructureID:
         )
         assert mol_r.canonical_geometry != mol_s.canonical_geometry
         assert mol_r.structure_id != mol_s.structure_id
+        assert mol_r.structure_label != mol_s.structure_label
+        assert mol_r.molecule_id != mol_s.molecule_id
+        assert mol_r.molecule_label != mol_s.molecule_label
+        # Connectivity layer is shared; stereo layer differs; protonation layer is shared
+        assert (
+            mol_r.molecule_id.split("-")[0] == mol_s.molecule_id.split("-")[0]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[1] != mol_s.molecule_id.split("-")[1]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[2] == mol_s.molecule_id.split("-")[2]
+        )
 
-    def test_different_molecules_differ(
+    # ── Different species: both ids differ ──
+
+    def test_different_species_differ_in_both_ids(
         self, canonical_formaldehyde_file, canonical_methane_file
     ):
-        """Two chemically distinct molecules must give different canonical_geometry,
-        structure_id, and structure_label values."""
+        """Two chemically distinct molecules must differ in both structure_id
+        and molecule_id."""
         mol_ch2o = Molecule.from_filepath(canonical_formaldehyde_file)
         mol_ch4 = Molecule.from_filepath(canonical_methane_file)
         assert mol_ch2o.canonical_geometry != mol_ch4.canonical_geometry
         assert mol_ch2o.structure_id != mol_ch4.structure_id
         assert mol_ch2o.structure_label != mol_ch4.structure_label
-
-    # ── Format / type tests ──
-
-    def test_structure_label_format(self, canonical_formaldehyde_file):
-        """structure_label must follow the pattern 'str-{chemical_formula}-{structure_id[:12]}'."""
-        mol = Molecule.from_filepath(canonical_formaldehyde_file)
-        expected = f"str-{mol.chemical_formula}-{mol.structure_id[:12]}"
-        assert mol.structure_label == expected
-
-    def test_structure_id_is_deterministic(self, canonical_formaldehyde_file):
-        """Loading the same file twice independently must produce identical
-        structure_id and structure_label values."""
-        mol_a = Molecule.from_filepath(canonical_formaldehyde_file)
-        mol_b = Molecule.from_filepath(canonical_formaldehyde_file)
-        assert mol_a.structure_id == mol_b.structure_id
-        assert mol_a.structure_label == mol_b.structure_label
+        assert mol_ch2o.molecule_id != mol_ch4.molecule_id
+        assert mol_ch2o.molecule_label != mol_ch4.molecule_label
