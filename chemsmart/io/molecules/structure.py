@@ -371,10 +371,10 @@ class Molecule:
     @property
     def structure_label(self):
         """Human-readable short label for the structure.
-        Combines the empirical formula with the first 12 characters of
-        structure_id, e.g. "C6H6-a1b2c3d4e5f6".
+        Combines the chemical formula with the first 12 characters of
+        structure_id, e.g. "str-C6H6-a1b2c3d4e5f6".
         """
-        return f"{self.empirical_formula}-{self.structure_id[:12]}"
+        return f"str-{self.chemical_formula}-{self.structure_id[:12]}"
 
     @property
     def chemical_formula(self):
@@ -383,14 +383,16 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
-    @property
+    @cached_property
     def inchikey(self):
-        """
-        Return the InChIKey string for the molecule using Open Babel.
-        This provides robust topological perception avoiding artifacts
-        from distance-based bond guessing.
+        """InChIKey string for the molecule (27-character).
+        Computed via Open Babel for robust topological perception,
+        avoiding artifacts from distance-based bond guessing.
+        Two molecules with identical connectivity and stereochemistry
+        will produce the same InChIKey.
         """
         try:
+            from openbabel import openbabel as ob
             from openbabel import pybel
         except ImportError as exc:
             raise ImportError(
@@ -406,8 +408,31 @@ class Molecule:
             )
         xyz_string = "\n".join(lines)
 
-        ob_mol = pybel.readstring("xyz", xyz_string)
-        return ob_mol.write("inchikey").strip()
+        # Suppress Open Babel C-level warnings during InChIKey generation
+        ob.obErrorLog.SetOutputLevel(ob.obError)
+        try:
+            ob_mol = pybel.readstring("xyz", xyz_string)
+            result = ob_mol.write("inchikey").strip()
+        finally:
+            ob.obErrorLog.SetOutputLevel(ob.obWarning)
+
+        return result
+
+    @cached_property
+    def molecule_id(self):
+        """Unique molecular identifier (InChIKey string).
+        Two molecules with identical connectivity and stereochemistry
+        will produce the same molecule_id.
+        """
+        return self.inchikey
+
+    @cached_property
+    def molecule_label(self):
+        """Unique, human-readable label for the molecule.
+        Combines the chemical formula with the molecule_id, e.g.
+        "mol-C6H6-UHOVQNZJYSORNB-UHFFFAOYSA-N".
+        """
+        return f"mol-{self.chemical_formula}-{self.inchikey}"
 
     @property
     def cxsmiles(self):

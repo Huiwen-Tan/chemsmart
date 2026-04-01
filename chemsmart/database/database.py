@@ -2,9 +2,11 @@
 Database module for storing assembled calculation records in SQLite.
 
 This module provides a SQLite-based database for storing assembled records
-from quantum chemistry calculations. The database uses two tables:
+from quantum chemistry calculations. The database uses four tables:
 - records: One row per calculation record (meta, results, provenance)
-- molecules: One row per molecule in each record (structure, properties)
+- molecules: One row per chemical species (molecule-level identity)
+- structures: One row per unique 3D geometry instance (conformer)
+- record_structures: Junction table linking records to structures
 """
 
 import logging
@@ -45,9 +47,11 @@ class Database:
     """SQLite database for storing assembled calculation records.
 
     This class provides methods for creating, populating, and managing
-    a database of assembled calculation records. Uses two tables:
+    a database of assembled calculation records. Uses four tables:
     - records: calculation-level data (one row per record)
-    - molecules: molecule-level data (one row per molecule)
+    - molecules: chemical species data (one row per unique species)
+    - structures: 3D geometry data (one row per unique conformer)
+    - record_structures: junction linking records to structures
 
     Attributes:
         db_file: Path to the SQLite database file.
@@ -60,7 +64,14 @@ class Database:
             self.db_file = self.db_file + ".db"
 
     def create(self):
-        """Create the database with the required schema (records and molecules tables)."""
+        """Create the database with the required schema.
+
+        Tables:
+        - records: One row per calculation record (meta, results, provenance)
+        - molecules: One row per chemical species (molecule-level identity)
+        - structures: One row per unique 3D geometry instance (conformer)
+        - record_structures: Junction table linking records to structures
+        """
         conn = sqlite3.connect(self.db_file)
         try:
             # Create records table
@@ -129,45 +140,66 @@ class Database:
                     assembled_at TEXT
                 )
             """)
-            # Create molecules table
+
+            # Create molecules table (chemical species)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS molecules (
-                    molecule_index INTEGER PRIMARY KEY AUTOINCREMENT,
-                    record_id TEXT NOT NULL,
-                    index_in_record INTEGER,
-                    structure_index_in_file INTEGER,
-                    is_optimized_structure INTEGER,
-                    charge INTEGER,
-                    multiplicity INTEGER,
-                    structure_id TEXT,
-                    structure_label TEXT,
-                    chemical_symbols_json TEXT,
-                    positions_json TEXT,
+                    molecule_id TEXT PRIMARY KEY NOT NULL,
+                    molecule_label TEXT,
+                    empirical_formula TEXT,
                     chemical_formula TEXT,
+                    smiles TEXT,
                     number_of_atoms INTEGER,
                     mass REAL,
                     elements_json TEXT,
                     element_counts_json TEXT,
-                    center_of_mass_json TEXT,
                     is_chiral INTEGER,
                     is_ring INTEGER,
                     is_aromatic INTEGER,
                     is_monoatomic INTEGER,
                     is_diatomic INTEGER,
-                    is_linear INTEGER,
-                    smiles TEXT,
+                    is_linear INTEGER
+                )
+            """)
+
+            # Create structures table (unique 3D geometry instances)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS structures (
+                    structure_id TEXT PRIMARY KEY,
+                    molecule_id TEXT NOT NULL,
+                    charge INTEGER,
+                    multiplicity INTEGER,
+                    structure_label TEXT,
+                    chemical_symbols_json TEXT,
+                    positions_json TEXT,
+                    center_of_mass_json TEXT,
                     moments_of_inertia_json TEXT,
-                    frozen_atoms_json TEXT,
+                    FOREIGN KEY (molecule_id) REFERENCES molecules(molecule_id)
+                )
+            """)
+
+            # Create record_structures junction table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS record_structures (
+                    record_id TEXT NOT NULL,
+                    structure_id TEXT NOT NULL,
+                    index_in_record INTEGER NOT NULL,
+                    structure_index_in_file INTEGER,
+                    is_optimized_structure INTEGER,
                     energy REAL,
                     forces_json TEXT,
+                    frozen_atoms_json TEXT,
                     mulliken_atomic_charges_json TEXT,
                     rotational_symmetry_number INTEGER,
                     num_vibrational_modes INTEGER,
                     vibrational_frequencies_json TEXT,
                     vibrational_modes_json TEXT,
-                    FOREIGN KEY (record_id) REFERENCES records(record_id)
+                    PRIMARY KEY (record_id, index_in_record),
+                    FOREIGN KEY (record_id) REFERENCES records(record_id),
+                    FOREIGN KEY (structure_id) REFERENCES structures(structure_id)
                 )
             """)
+
             # Create indices
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_record_id ON records(record_id)"
@@ -176,13 +208,19 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_program ON records(program)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_mol_record_id ON molecules(record_id)"
+                "CREATE INDEX IF NOT EXISTS idx_mol_empirical_formula ON molecules(empirical_formula)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chemical_formula ON molecules(chemical_formula)"
+                "CREATE INDEX IF NOT EXISTS idx_mol_chemical_formula ON molecules(chemical_formula)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_structure_id ON molecules(structure_id)"
+                "CREATE INDEX IF NOT EXISTS idx_struct_molecule_id ON structures(molecule_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rs_record_id ON record_structures(record_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rs_structure_id ON record_structures(structure_id)"
             )
             conn.commit()
             logger.debug(f"Created database at {self.db_file}.")
@@ -317,61 +355,97 @@ class Database:
         )
 
     def _insert_molecule_rows(self, conn, record_dict):
-        """Insert rows into the molecules table for each molecule in the record."""
+        """Insert rows into molecules, structures, and record_structures tables.
+
+        For each molecule entry in the record:
+        1. INSERT OR IGNORE into molecules (species dedup by molecule_id)
+        2. INSERT OR IGNORE into structures (geometry dedup by structure_id)
+        3. INSERT into record_structures (per-calculation data)
+        """
         record_id = record_dict.get("record_id")
         molecules = record_dict.get("molecules", [])
 
-        # Delete existing molecules for this record (for REPLACE behavior)
-        conn.execute("DELETE FROM molecules WHERE record_id = ?", (record_id,))
+        # Delete existing record_structures for this record (for REPLACE behavior)
+        conn.execute(
+            "DELETE FROM record_structures WHERE record_id = ?", (record_id,)
+        )
 
         for mol in molecules:
+            molecule_id = mol.get("molecule_id")
+            structure_id = mol.get("structure_id")
+
+            # Step 1: Insert species (dedup by molecule_id)
             conn.execute(
                 """
-                INSERT INTO molecules (
-                    record_id, index_in_record, structure_index_in_file,
-                    is_optimized_structure, charge, multiplicity,
-                    structure_id, structure_label,
-                    chemical_symbols_json, positions_json, chemical_formula,
-                    number_of_atoms, mass, elements_json, element_counts_json,
-                    center_of_mass_json, is_chiral, is_ring, is_aromatic, is_monoatomic,
-                    is_diatomic, is_linear, smiles, moments_of_inertia_json,
-                    frozen_atoms_json, energy, forces_json,
-                    mulliken_atomic_charges_json, rotational_symmetry_number,
-                    num_vibrational_modes, vibrational_frequencies_json,
-                    vibrational_modes_json
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
+                INSERT OR IGNORE INTO molecules (
+                    molecule_id, molecule_label, empirical_formula,
+                    chemical_formula, smiles, number_of_atoms, mass,
+                    elements_json, element_counts_json, is_chiral, is_ring,
+                    is_aromatic, is_monoatomic, is_diatomic, is_linear
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    record_id,
-                    mol.get("index"),
-                    mol.get("structure_index_in_file"),
-                    1 if mol.get("is_optimized_structure") else 0,
-                    mol.get("charge"),
-                    mol.get("multiplicity"),
-                    mol.get("structure_id"),
-                    mol.get("structure_label"),
-                    to_json(mol.get("chemical_symbols")),
-                    to_json(mol.get("positions")),
+                    molecule_id,
+                    mol.get("molecule_label"),
+                    mol.get("empirical_formula"),
                     mol.get("chemical_formula"),
+                    mol.get("smiles"),
                     mol.get("number_of_atoms"),
                     mol.get("mass"),
                     to_json(mol.get("elements")),
                     to_json(mol.get("element_counts")),
-                    to_json(mol.get("center_of_mass")),
                     1 if mol.get("is_chiral") else 0,
                     1 if mol.get("is_ring") else 0,
                     1 if mol.get("is_aromatic") else 0,
                     1 if mol.get("is_monoatomic") else 0,
                     1 if mol.get("is_diatomic") else 0,
                     1 if mol.get("is_linear") else 0,
-                    mol.get("smiles"),
+                ),
+            )
+
+            # Step 2: Insert structure (dedup by structure_id)
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO structures (
+                    structure_id, molecule_id, charge, multiplicity,
+                    structure_label, chemical_symbols_json, positions_json,
+                    center_of_mass_json, moments_of_inertia_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    structure_id,
+                    molecule_id,
+                    mol.get("charge"),
+                    mol.get("multiplicity"),
+                    mol.get("structure_label"),
+                    to_json(mol.get("chemical_symbols")),
+                    to_json(mol.get("positions")),
+                    to_json(mol.get("center_of_mass")),
                     to_json(mol.get("moments_of_inertia")),
-                    to_json(mol.get("frozen_atoms")),
+                ),
+            )
+
+            # Step 3: Insert record-structure link (per-calculation data)
+            conn.execute(
+                """
+                INSERT INTO record_structures (
+                    record_id, structure_id, index_in_record,
+                    structure_index_in_file, is_optimized_structure,
+                    energy, forces_json, frozen_atoms_json,
+                    mulliken_atomic_charges_json, rotational_symmetry_number,
+                    num_vibrational_modes, vibrational_frequencies_json,
+                    vibrational_modes_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record_id,
+                    structure_id,
+                    mol.get("index"),
+                    mol.get("structure_index_in_file"),
+                    1 if mol.get("is_optimized_structure") else 0,
                     mol.get("energy"),
                     to_json(mol.get("forces")),
+                    to_json(mol.get("frozen_atoms")),
                     to_json(mol.get("mulliken_atomic_charges")),
                     mol.get("rotational_symmetry_number"),
                     mol.get("num_vibrational_modes"),
@@ -484,12 +558,30 @@ class Database:
             conn.close()
 
     def _row_to_full_record(self, conn, record_row):
-        """Convert a record row to full record dictionary with molecules."""
+        """Convert a record row to full record dictionary with molecules.
+
+        Joins record_structures, structures, and molecules tables to
+        reconstruct the full molecule data for each entry in the record.
+        """
         record_id = record_row["record_id"]
 
-        # Get molecules for this record
+        # Get molecules for this record via three-table join
         cursor = conn.execute(
-            "SELECT * FROM molecules WHERE record_id = ? ORDER BY index_in_record",
+            """
+            SELECT rs.*, s.charge, s.multiplicity,
+                   s.structure_label, s.chemical_symbols_json, s.positions_json,
+                   s.center_of_mass_json, s.moments_of_inertia_json,
+                   m.molecule_id, m.molecule_label, m.empirical_formula,
+                   m.chemical_formula, m.smiles, m.number_of_atoms, m.mass,
+                   m.elements_json, m.element_counts_json, m.is_chiral,
+                   m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
+                   m.is_linear
+            FROM record_structures rs
+            JOIN structures s ON rs.structure_id = s.structure_id
+            JOIN molecules m ON s.molecule_id = m.molecule_id
+            WHERE rs.record_id = ?
+            ORDER BY rs.index_in_record
+            """,
             (record_id,),
         )
         mol_rows = cursor.fetchall()
@@ -606,15 +698,24 @@ class Database:
 
     @staticmethod
     def _mol_row_to_dict(row):
-        """Convert molecule row to dictionary."""
+        """Convert a joined record_structures+structures+molecules row to dictionary.
+
+        Produces a flat dict compatible with the original molecule dict format,
+        with additional molecule_id, molecule_label, and empirical_formula fields.
+        """
         mol = {
             "index": row.get("index_in_record"),
+            "molecule_id": row.get("molecule_id"),
+            "molecule_label": row.get("molecule_label"),
+            "structure_id": row.get("structure_id"),
             "structure_index_in_file": row.get("structure_index_in_file"),
             "is_optimized_structure": bool(row.get("is_optimized_structure")),
             "charge": row.get("charge"),
             "multiplicity": row.get("multiplicity"),
+            "structure_label": row.get("structure_label"),
             "chemical_symbols": from_json(row.get("chemical_symbols_json")),
             "positions": from_json(row.get("positions_json")),
+            "empirical_formula": row.get("empirical_formula"),
             "chemical_formula": row.get("chemical_formula"),
             "number_of_atoms": row.get("number_of_atoms"),
             "mass": row.get("mass"),
@@ -728,11 +829,14 @@ class Database:
             if row is None:
                 return None
 
-            # Get last molecule info
+            # Get last molecule info via three-table join
             mol_cursor = conn.execute(
-                """SELECT chemical_formula, charge, multiplicity, smiles 
-                   FROM molecules WHERE record_id = ? 
-                   ORDER BY index_in_record DESC LIMIT 1""",
+                """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
+                   FROM record_structures rs
+                   JOIN structures s ON rs.structure_id = s.structure_id
+                   JOIN molecules m ON s.molecule_id = m.molecule_id
+                   WHERE rs.record_id = ?
+                   ORDER BY rs.index_in_record DESC LIMIT 1""",
                 (row["record_id"],),
             )
             mol_row = mol_cursor.fetchone()
@@ -764,11 +868,14 @@ class Database:
             summaries = []
             for row in rows:
                 summary = dict(row)
-                # Get last molecule info
+                # Get last molecule info via three-table join
                 mol_cursor = conn.execute(
-                    """SELECT chemical_formula, charge, multiplicity, smiles
-                       FROM molecules WHERE record_id = ?
-                       ORDER BY index_in_record DESC LIMIT 1""",
+                    """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
+                       FROM record_structures rs
+                       JOIN structures s ON rs.structure_id = s.structure_id
+                       JOIN molecules m ON s.molecule_id = m.molecule_id
+                       WHERE rs.record_id = ?
+                       ORDER BY rs.index_in_record DESC LIMIT 1""",
                     (row["record_id"],),
                 )
                 mol_row = mol_cursor.fetchone()
@@ -792,7 +899,21 @@ class Database:
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
-                "SELECT * FROM molecules WHERE record_id = ? ORDER BY index_in_record",
+                """
+                SELECT rs.*, s.charge, s.multiplicity,
+                       s.structure_label, s.chemical_symbols_json, s.positions_json,
+                       s.center_of_mass_json, s.moments_of_inertia_json,
+                       m.molecule_id, m.molecule_label, m.empirical_formula,
+                       m.chemical_formula, m.smiles, m.number_of_atoms, m.mass,
+                       m.elements_json, m.element_counts_json, m.is_chiral,
+                       m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
+                       m.is_linear
+                FROM record_structures rs
+                JOIN structures s ON rs.structure_id = s.structure_id
+                JOIN molecules m ON s.molecule_id = m.molecule_id
+                WHERE rs.record_id = ?
+                ORDER BY rs.index_in_record
+                """,
                 (record_id,),
             )
             rows = cursor.fetchall()
@@ -812,10 +933,11 @@ class Database:
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
-            # Join records with last molecule to allow querying by chemical_formula
             sql = f"""
                 SELECT DISTINCT r.* FROM records r
-                LEFT JOIN molecules m ON r.record_id = m.record_id
+                LEFT JOIN record_structures rs ON r.record_id = rs.record_id
+                LEFT JOIN structures s ON rs.structure_id = s.structure_id
+                LEFT JOIN molecules m ON s.molecule_id = m.molecule_id
                 WHERE {where_clause}
                 ORDER BY r.record_index
             """
@@ -840,9 +962,11 @@ class Database:
             sql = f"""
                 SELECT DISTINCT r.record_index, r.record_id, r.program,
                        r.functional, r.basis, r.jobtype, r.total_energy,
-                       m.chemical_formula, m.charge, m.multiplicity
+                       m.chemical_formula, s.charge, s.multiplicity
                 FROM records r
-                LEFT JOIN molecules m ON r.record_id = m.record_id
+                LEFT JOIN record_structures rs ON r.record_id = rs.record_id
+                LEFT JOIN structures s ON rs.structure_id = s.structure_id
+                LEFT JOIN molecules m ON s.molecule_id = m.molecule_id
                 WHERE {where_clause}
                 ORDER BY r.record_index
             """

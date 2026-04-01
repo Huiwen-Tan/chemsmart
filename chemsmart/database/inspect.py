@@ -66,6 +66,12 @@ class DatabaseInspector:
             stats["num_molecules"] = conn.execute(
                 "SELECT COUNT(*) FROM molecules"
             ).fetchone()[0]
+            stats["num_structures"] = conn.execute(
+                "SELECT COUNT(*) FROM structures"
+            ).fetchone()[0]
+            stats["num_record_structures"] = conn.execute(
+                "SELECT COUNT(*) FROM record_structures"
+            ).fetchone()[0]
 
             # Program breakdown
             rows = conn.execute(
@@ -103,9 +109,9 @@ class DatabaseInspector:
             stats["solvated_records"] = row["solvated_records"]
             stats["gas_phase_records"] = row["gas_phase_records"]
 
-            # Frequency and solvent count (from molecules table)
+            # Frequency and solvent count (from record_structures table)
             stats["freq_count"] = conn.execute(
-                "SELECT COUNT(DISTINCT record_id) FROM molecules WHERE vibrational_frequencies_json IS NOT NULL"
+                "SELECT COUNT(DISTINCT record_id) FROM record_structures WHERE vibrational_frequencies_json IS NOT NULL"
             ).fetchone()[0]
             rows = conn.execute("""
                 SELECT solvent_id, COUNT(*) AS cnt
@@ -159,6 +165,9 @@ class DatabaseInspector:
         lines.append(format_kv("Size", human_size(stats["db_size"])))
         lines.append(format_kv("Records", stats["num_records"]))
         lines.append(format_kv("Molecules", stats["num_molecules"]))
+        lines.append(
+            format_kv("Structures (Conformers)", stats["num_structures"])
+        )
         assembled_first = truncate_iso(stats.get("assembled_first"))
         assembled_last = truncate_iso(stats.get("assembled_last"))
         lines.append(format_kv("Created", f"{assembled_first} (UTC)"))

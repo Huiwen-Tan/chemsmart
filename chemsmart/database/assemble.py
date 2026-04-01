@@ -135,6 +135,8 @@ class BaseAssembler:
 
     def get_molecule_info(self, mol):
         molecule_info = {
+            "molecule_label": mol.molecule_label,
+            "molecule_id": mol.molecule_id,
             "structure_index_in_file": mol.structure_index_in_file,
             "is_optimized_structure": mol.is_optimized_structure,
             "charge": mol.charge,
@@ -143,6 +145,7 @@ class BaseAssembler:
             "structure_label": mol.structure_label,
             "chemical_symbols": mol.chemical_symbols,
             "positions": mol.positions,
+            "empirical_formula": mol.empirical_formula,
             "chemical_formula": mol.chemical_formula,
             "number_of_atoms": mol.num_atoms,
             "mass": mol.mass,

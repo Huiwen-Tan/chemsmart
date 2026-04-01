@@ -2351,9 +2351,9 @@ class TestCanonicalGeometryAndStructureID:
     # ── Format / type tests ──
 
     def test_structure_label_format(self, canonical_formaldehyde_file):
-        """structure_label must follow the pattern '{empirical_formula}-{structure_id[:12]}'."""
+        """structure_label must follow the pattern 'str-{chemical_formula}-{structure_id[:12]}'."""
         mol = Molecule.from_filepath(canonical_formaldehyde_file)
-        expected = f"{mol.empirical_formula}-{mol.structure_id[:12]}"
+        expected = f"str-{mol.chemical_formula}-{mol.structure_id[:12]}"
         assert mol.structure_label == expected
 
     def test_structure_id_is_deterministic(self, canonical_formaldehyde_file):

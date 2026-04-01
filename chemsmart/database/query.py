@@ -34,13 +34,19 @@ TABLE_FIELDS = {
         "gibbs_free_energy",
         "source_file",
     },
-    # molecules table
+    # molecules table (chemical species)
     "m": {
-        "charge",
-        "multiplicity",
+        "molecule_label",
         "chemical_formula",
+        "empirical_formula",
         "smiles",
         "number_of_atoms",
+    },
+    # structures table (geometry instances)
+    "s": {
+        "structure_id",
+        "charge",
+        "multiplicity",
     },
 }
 
@@ -52,11 +58,19 @@ QUERYABLE_FIELDS = {
 
 SUPPORTED_OPERATORS = {"<", "<=", ">", ">=", "=", "!=", "~"}
 
+# Common four-table join used across queries
+_JOIN_CLAUSE = """
+    FROM records r
+    LEFT JOIN record_structures rs ON r.record_id = rs.record_id
+    LEFT JOIN structures s ON rs.structure_id = s.structure_id
+    LEFT JOIN molecules m ON s.molecule_id = m.molecule_id
+"""
+
 
 class DatabaseQuery:
     """Query and filter records from a chemsmart database."""
 
-    _SUMMARY_SQL = """
+    _SUMMARY_SQL = f"""
         SELECT DISTINCT
             r.record_index,
             r.record_id,
@@ -67,8 +81,7 @@ class DatabaseQuery:
             r.total_energy,
             r.source_file,
             m.chemical_formula
-        FROM records r
-        LEFT JOIN molecules m ON r.record_id = m.record_id
+        {_JOIN_CLAUSE}
     """
 
     _TABLE_COLUMNS = [
@@ -169,15 +182,13 @@ class DatabaseQuery:
             if self.query_string:
                 where_clause, params = self.parse_query()
                 sql = (
-                    "SELECT DISTINCT r.* FROM records r "
-                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    f"SELECT DISTINCT r.* {_JOIN_CLAUSE} "
                     f"WHERE {where_clause} ORDER BY r.record_index"
                 )
             else:
                 params = ()
                 sql = (
-                    "SELECT DISTINCT r.* FROM records r "
-                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    f"SELECT DISTINCT r.* {_JOIN_CLAUSE} "
                     "ORDER BY r.record_index"
                 )
             if self.limit is not None and self.limit > 0:
@@ -217,8 +228,7 @@ class DatabaseQuery:
             if self.query_string:
                 where_clause, params = self.parse_query()
                 sql = (
-                    "SELECT COUNT(DISTINCT r.record_id) FROM records r "
-                    "LEFT JOIN molecules m ON r.record_id = m.record_id "
+                    f"SELECT COUNT(DISTINCT r.record_id) {_JOIN_CLAUSE} "
                     f"WHERE {where_clause}"
                 )
                 cursor = conn.execute(sql, params)

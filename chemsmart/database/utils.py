@@ -16,22 +16,26 @@ CUSTOM_SOLVENT_KEYWORDS = {"generic,read"}
 
 
 def is_chemsmart_database(filepath):
-    """Check if a .db file is a chemsmart database (has both 'records' and 'molecules' tables)."""
+    """Check if a .db file is a chemsmart database.
+
+    A valid chemsmart database contains the four tables:
+    'records', 'molecules', 'structures', and 'record_structures'.
+    """
     import sqlite3
 
+    required_tables = {
+        "records",
+        "molecules",
+        "structures",
+        "record_structures",
+    }
     try:
         conn = sqlite3.connect(filepath)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='records'"
-        )
-        has_records = cursor.fetchone() is not None
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='molecules'"
-        )
-        has_molecules = cursor.fetchone() is not None
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = {row[0] for row in cursor.fetchall()}
         conn.close()
-        return has_records and has_molecules
+        return required_tables.issubset(tables)
     except Exception:
         return False
 
