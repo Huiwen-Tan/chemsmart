@@ -149,6 +149,8 @@ class Database:
                     empirical_formula TEXT,
                     chemical_formula TEXT,
                     smiles TEXT,
+                    inchi TEXT,
+                    chiral_centers_json TEXT,
                     number_of_atoms INTEGER,
                     mass REAL,
                     elements_json TEXT,
@@ -158,7 +160,9 @@ class Database:
                     is_aromatic INTEGER,
                     is_monoatomic INTEGER,
                     is_diatomic INTEGER,
-                    is_linear INTEGER
+                    is_linear INTEGER,
+                    is_multicomponent INTEGER,
+                    num_components INTEGER
                 )
             """)
 
@@ -379,10 +383,12 @@ class Database:
                 """
                 INSERT OR IGNORE INTO molecules (
                     molecule_id, molecule_label, empirical_formula,
-                    chemical_formula, smiles, number_of_atoms, mass,
+                    chemical_formula, smiles, inchi, chiral_centers_json,
+                    number_of_atoms, mass,
                     elements_json, element_counts_json, is_chiral, is_ring,
-                    is_aromatic, is_monoatomic, is_diatomic, is_linear
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_aromatic, is_monoatomic, is_diatomic, is_linear,
+                    is_multicomponent, num_components
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     molecule_id,
@@ -390,6 +396,8 @@ class Database:
                     mol.get("empirical_formula"),
                     mol.get("chemical_formula"),
                     mol.get("smiles"),
+                    mol.get("inchi"),
+                    to_json(mol.get("chiral_centers")),
                     mol.get("number_of_atoms"),
                     mol.get("mass"),
                     to_json(mol.get("elements")),
@@ -400,6 +408,8 @@ class Database:
                     1 if mol.get("is_monoatomic") else 0,
                     1 if mol.get("is_diatomic") else 0,
                     1 if mol.get("is_linear") else 0,
+                    1 if mol.get("is_multicomponent") else 0,
+                    mol.get("num_components"),
                 ),
             )
 
@@ -572,10 +582,11 @@ class Database:
                    s.structure_label, s.chemical_symbols_json, s.positions_json,
                    s.center_of_mass_json, s.moments_of_inertia_json,
                    m.molecule_id, m.molecule_label, m.empirical_formula,
-                   m.chemical_formula, m.smiles, m.number_of_atoms, m.mass,
+                   m.chemical_formula, m.smiles, m.inchi, m.chiral_centers_json,
+                   m.number_of_atoms, m.mass,
                    m.elements_json, m.element_counts_json, m.is_chiral,
                    m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
-                   m.is_linear
+                   m.is_linear, m.is_multicomponent, m.num_components
             FROM record_structures rs
             JOIN structures s ON rs.structure_id = s.structure_id
             JOIN molecules m ON s.molecule_id = m.molecule_id
@@ -728,7 +739,11 @@ class Database:
             "is_monoatomic": bool(row.get("is_monoatomic")),
             "is_diatomic": bool(row.get("is_diatomic")),
             "is_linear": bool(row.get("is_linear")),
+            "is_multicomponent": bool(row.get("is_multicomponent")),
+            "num_components": row.get("num_components"),
             "smiles": row.get("smiles"),
+            "inchi": row.get("inchi"),
+            "chiral_centers": from_json(row.get("chiral_centers_json")),
             "moments_of_inertia": from_json(
                 row.get("moments_of_inertia_json")
             ),
@@ -904,10 +919,11 @@ class Database:
                        s.structure_label, s.chemical_symbols_json, s.positions_json,
                        s.center_of_mass_json, s.moments_of_inertia_json,
                        m.molecule_id, m.molecule_label, m.empirical_formula,
-                       m.chemical_formula, m.smiles, m.number_of_atoms, m.mass,
+                       m.chemical_formula, m.smiles, m.inchi, m.chiral_centers_json,
+                       m.number_of_atoms, m.mass,
                        m.elements_json, m.element_counts_json, m.is_chiral,
                        m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
-                       m.is_linear
+                       m.is_linear, m.is_multicomponent, m.num_components
                 FROM record_structures rs
                 JOIN structures s ON rs.structure_id = s.structure_id
                 JOIN molecules m ON s.molecule_id = m.molecule_id
