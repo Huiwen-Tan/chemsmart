@@ -253,7 +253,7 @@ class Database:
 
         try:
             self._insert_record_row(conn, record_dict, program)
-            self._insert_molecule_rows(conn, record_dict)
+            self._insert_related_rows(conn, record_dict)
             if close_conn:
                 conn.commit()
         finally:
@@ -358,10 +358,10 @@ class Database:
             ),
         )
 
-    def _insert_molecule_rows(self, conn, record_dict):
+    def _insert_related_rows(self, conn, record_dict):
         """Insert rows into molecules, structures, and record_structures tables.
 
-        For each molecule entry in the record:
+        For each Molecule entry in the record, splits its data into:
         1. INSERT OR IGNORE into molecules (species dedup by molecule_id)
         2. INSERT OR IGNORE into structures (geometry dedup by structure_id)
         3. INSERT into record_structures (per-calculation data)
@@ -517,14 +517,14 @@ class Database:
         return Path(self.db_file).exists()
 
     def get_record(self, record_index=None, record_id=None):
-        """Get a full record with molecules from the database.
+        """Get a full record with structures from the database.
 
         Args:
             record_index: Record index (1-based).
             record_id: Record ID string.
 
         Returns:
-            Full record dictionary with meta, results, molecules, provenance.
+            Full record dictionary with meta, results, structures, provenance.
         """
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
@@ -568,14 +568,14 @@ class Database:
             conn.close()
 
     def _row_to_full_record(self, conn, record_row):
-        """Convert a record row to full record dictionary with molecules.
+        """Convert a record row to full record dictionary with structures.
 
         Joins record_structures, structures, and molecules tables to
-        reconstruct the full molecule data for each entry in the record.
+        reconstruct the full structure data for each entry in the record.
         """
         record_id = record_row["record_id"]
 
-        # Get molecules for this record via three-table join
+        # Get structures for this record via three-table join
         cursor = conn.execute(
             """
             SELECT rs.*, s.charge, s.multiplicity,
@@ -595,14 +595,17 @@ class Database:
             """,
             (record_id,),
         )
-        mol_rows = cursor.fetchall()
+        struct_rows = cursor.fetchall()
 
         return {
             "record_index": record_row["record_index"],
             "record_id": record_id,
             "meta": self._extract_meta(record_row),
             "results": self._extract_results(record_row),
-            "molecules": [self._mol_row_to_dict(dict(m)) for m in mol_rows],
+            "structures": [
+                self._record_structure_row_to_dict(dict(r))
+                for r in struct_rows
+            ],
             "provenance": self._extract_provenance(record_row),
         }
 
@@ -708,11 +711,12 @@ class Database:
         }
 
     @staticmethod
-    def _mol_row_to_dict(row):
-        """Convert a joined record_structures+structures+molecules row to dictionary.
+    def _record_structure_row_to_dict(row):
+        """Convert a joined record_structures+structures+molecules row to dict.
 
-        Produces a flat dict compatible with the original molecule dict format,
-        with additional molecule_id, molecule_label, and empirical_formula fields.
+        Produces a flat dict representing one structure entry within a record,
+        combining per-calculation data (from record_structures), geometry data
+        (from structures), and species identity (from molecules).
         """
         mol = {
             "index": row.get("index_in_record"),
@@ -809,15 +813,7 @@ class Database:
         record_index=None,
         record_id=None,
     ):
-        """Get summary of a record (without molecules).
-
-        Args:
-            record_index: Record index (1-based).
-            record_id: Record ID string.
-
-        Returns:
-            Record summary dictionary.
-        """
+        """Get summary of a record (without structures)."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
@@ -844,8 +840,8 @@ class Database:
             if row is None:
                 return None
 
-            # Get last molecule info via three-table join
-            mol_cursor = conn.execute(
+            # Get last structure's molecule info via three-table join
+            struct_cursor = conn.execute(
                 """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
                    FROM record_structures rs
                    JOIN structures s ON rs.structure_id = s.structure_id
@@ -854,21 +850,17 @@ class Database:
                    ORDER BY rs.index_in_record DESC LIMIT 1""",
                 (row["record_id"],),
             )
-            mol_row = mol_cursor.fetchone()
+            struct_row = struct_cursor.fetchone()
 
             summary = dict(row)
-            if mol_row:
-                summary.update(dict(mol_row))
+            if struct_row:
+                summary.update(dict(struct_row))
             return summary
         finally:
             conn.close()
 
     def get_all_record_summaries(self):
-        """Get summaries for all records.
-
-        Returns:
-            List of record summary dictionaries.
-        """
+        """Get summaries for all records."""
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         try:
@@ -883,8 +875,8 @@ class Database:
             summaries = []
             for row in rows:
                 summary = dict(row)
-                # Get last molecule info via three-table join
-                mol_cursor = conn.execute(
+                # Get last structure's molecule info via three-table join
+                struct_cursor = conn.execute(
                     """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
                        FROM record_structures rs
                        JOIN structures s ON rs.structure_id = s.structure_id
@@ -893,22 +885,19 @@ class Database:
                        ORDER BY rs.index_in_record DESC LIMIT 1""",
                     (row["record_id"],),
                 )
-                mol_row = mol_cursor.fetchone()
-                if mol_row:
-                    summary.update(dict(mol_row))
+                struct_row = struct_cursor.fetchone()
+                if struct_row:
+                    summary.update(dict(struct_row))
                 summaries.append(summary)
             return summaries
         finally:
             conn.close()
 
-    def get_molecules_for_record(self, record_id):
-        """Get all molecules for a specific record.
+    def get_structures_for_record(self, record_id):
+        """Get all structure entries for a specific record.
 
-        Args:
-            record_id: Record ID string.
-
-        Returns:
-            List of molecule dictionaries.
+        Returns the full joined record_structures + structures + molecules
+        data for each structure entry in the record.
         """
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
@@ -933,9 +922,287 @@ class Database:
                 (record_id,),
             )
             rows = cursor.fetchall()
-            return [self._mol_row_to_dict(dict(row)) for row in rows]
+            return [
+                self._record_structure_row_to_dict(dict(row)) for row in rows
+            ]
         finally:
             conn.close()
+
+    def get_molecule(self, molecule_id):
+        """Get a molecule (chemical species) by molecule_id."""
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM molecules WHERE molecule_id = ?",
+                (molecule_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._molecule_row_to_dict(dict(row))
+        finally:
+            conn.close()
+
+    def get_all_molecules(self):
+        """Get all unique molecules (chemical species) from the database."""
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM molecules ORDER BY chemical_formula"
+            )
+            rows = cursor.fetchall()
+            return [self._molecule_row_to_dict(dict(row)) for row in rows]
+        finally:
+            conn.close()
+
+    def get_molecule_by_partial_id(self, partial_id):
+        """Resolve a partial molecule ID to the full molecule_id."""
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute(
+                "SELECT molecule_id FROM molecules WHERE molecule_id LIKE ?",
+                (partial_id + "%",),
+            )
+            matches = [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        if len(matches) == 0:
+            raise ValueError(
+                f"No molecule found matching ID prefix '{partial_id}'."
+            )
+        if len(matches) > 1:
+            preview = ", ".join(m[:12] for m in matches[:10])
+            raise ValueError(
+                f"Ambiguous ID prefix '{partial_id}' matches "
+                f"{len(matches)} molecules: {preview}"
+            )
+        return matches[0]
+
+    def count_molecules(self):
+        """Count unique molecules in the database."""
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM molecules")
+            return cursor.fetchone()[0]
+        finally:
+            conn.close()
+
+    def get_structure(self, structure_id):
+        """Get a structure (conformer) by structure_id.
+
+        Returns structure fields joined with parent molecule info for
+        convenient display.
+        """
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT s.*, m.chemical_formula, m.empirical_formula,
+                       m.number_of_atoms, m.mass, m.smiles
+                FROM structures s
+                JOIN molecules m ON s.molecule_id = m.molecule_id
+                WHERE s.structure_id = ?
+                """,
+                (structure_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._structure_row_to_dict(dict(row))
+        finally:
+            conn.close()
+
+    def get_all_structures(self):
+        """Get all structures (conformers) from the database."""
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute("""
+                SELECT s.*, m.chemical_formula, m.empirical_formula,
+                       m.number_of_atoms, m.mass, m.smiles
+                FROM structures s
+                JOIN molecules m ON s.molecule_id = m.molecule_id
+                ORDER BY s.molecule_id, s.structure_id
+                """)
+            rows = cursor.fetchall()
+            return [self._structure_row_to_dict(dict(row)) for row in rows]
+        finally:
+            conn.close()
+
+    def get_structure_by_partial_id(self, partial_id):
+        """Resolve a partial structure ID to the full structure_id.
+
+        Matches structure IDs that start with the given prefix. Requires
+        exactly one match; raises ValueError otherwise.
+        """
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute(
+                "SELECT structure_id FROM structures WHERE structure_id LIKE ?",
+                (partial_id + "%",),
+            )
+            matches = [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+        if len(matches) == 0:
+            raise ValueError(
+                f"No structure found matching ID prefix '{partial_id}'."
+            )
+        if len(matches) > 1:
+            preview = ", ".join(m[:12] for m in matches[:10])
+            raise ValueError(
+                f"Ambiguous ID prefix '{partial_id}' matches "
+                f"{len(matches)} structures: {preview}"
+            )
+        return matches[0]
+
+    def count_structures(self):
+        """Count unique structures in the database."""
+        conn = sqlite3.connect(self.db_file)
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM structures")
+            return cursor.fetchone()[0]
+        finally:
+            conn.close()
+
+    def get_structures_for_molecule(self, molecule_id):
+        """Get all structures (conformers) belonging to a molecule."""
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT s.*, m.chemical_formula, m.empirical_formula,
+                       m.number_of_atoms, m.mass, m.smiles
+                FROM structures s
+                JOIN molecules m ON s.molecule_id = m.molecule_id
+                WHERE s.molecule_id = ?
+                ORDER BY s.structure_id
+                """,
+                (molecule_id,),
+            )
+            rows = cursor.fetchall()
+            return [self._structure_row_to_dict(dict(row)) for row in rows]
+        finally:
+            conn.close()
+
+    def get_records_for_molecule(self, molecule_id):
+        """Get all record summaries that reference a given molecule.
+
+        Traverses: molecules → structures → record_structures → records.
+        """
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT r.record_index, r.record_id, r.program,
+                       r.functional, r.basis, r.jobtype, r.total_energy,
+                       r.source_file
+                FROM records r
+                JOIN record_structures rs ON r.record_id = rs.record_id
+                JOIN structures s ON rs.structure_id = s.structure_id
+                WHERE s.molecule_id = ?
+                ORDER BY r.record_index
+                """,
+                (molecule_id,),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def get_records_for_structure(self, structure_id):
+        """Get all record summaries that reference a given structure.
+
+        Traverses: record_structures → records.
+        """
+        conn = sqlite3.connect(self.db_file)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT r.record_index, r.record_id, r.program,
+                       r.functional, r.basis, r.jobtype, r.total_energy,
+                       r.source_file
+                FROM records r
+                JOIN record_structures rs ON r.record_id = rs.record_id
+                WHERE rs.structure_id = ?
+                ORDER BY r.record_index
+                """,
+                (structure_id,),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _molecule_row_to_dict(row):
+        """Convert a molecules table row to a clean dictionary.
+
+        Deserializes JSON fields and converts boolean integers to Python
+        bools.
+        """
+        return {
+            "molecule_id": row.get("molecule_id"),
+            "molecule_label": row.get("molecule_label"),
+            "empirical_formula": row.get("empirical_formula"),
+            "chemical_formula": row.get("chemical_formula"),
+            "smiles": row.get("smiles"),
+            "inchi": row.get("inchi"),
+            "chiral_centers": from_json(row.get("chiral_centers_json")),
+            "number_of_atoms": row.get("number_of_atoms"),
+            "mass": row.get("mass"),
+            "elements": from_json(row.get("elements_json")),
+            "element_counts": from_json(row.get("element_counts_json")),
+            "is_chiral": bool(row.get("is_chiral")),
+            "is_ring": bool(row.get("is_ring")),
+            "is_aromatic": bool(row.get("is_aromatic")),
+            "is_monoatomic": bool(row.get("is_monoatomic")),
+            "is_diatomic": bool(row.get("is_diatomic")),
+            "is_linear": bool(row.get("is_linear")),
+            "is_multicomponent": bool(row.get("is_multicomponent")),
+            "num_components": row.get("num_components"),
+        }
+
+    @staticmethod
+    def _structure_row_to_dict(row):
+        """Convert a structures table row (joined with molecules) to a
+        clean dictionary.
+
+        Deserializes JSON fields (chemical_symbols, positions, etc.) and
+        includes molecule-level convenience fields when present in the row.
+        """
+        d = {
+            "structure_id": row.get("structure_id"),
+            "molecule_id": row.get("molecule_id"),
+            "charge": row.get("charge"),
+            "multiplicity": row.get("multiplicity"),
+            "structure_label": row.get("structure_label"),
+            "chemical_symbols": from_json(row.get("chemical_symbols_json")),
+            "positions": from_json(row.get("positions_json")),
+            "center_of_mass": from_json(row.get("center_of_mass_json")),
+            "moments_of_inertia": from_json(
+                row.get("moments_of_inertia_json")
+            ),
+        }
+        # Include molecule-level fields when available (from JOIN)
+        for key in (
+            "chemical_formula",
+            "empirical_formula",
+            "number_of_atoms",
+            "mass",
+            "smiles",
+        ):
+            if key in row:
+                d[key] = row[key]
+        return d
 
     def query(self, where_clause):
         """Query records with a SQL WHERE clause.

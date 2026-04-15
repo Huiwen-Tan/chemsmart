@@ -416,15 +416,15 @@ class ORCAJobSettings(MolecularJobSettings):
             return None
 
         meta = record.get("meta", {})
-        molecules = record.get("molecules", [])
+        structures = record.get("structures", [])
 
-        # Extract charge/multiplicity from the last molecule
+        # Extract charge/multiplicity from the last structure
         charge = None
         multiplicity = None
-        if molecules:
-            last_mol = molecules[-1]
-            charge = last_mol.get("charge")
-            multiplicity = last_mol.get("multiplicity")
+        if structures:
+            last_struct = structures[-1]
+            charge = last_struct.get("charge")
+            multiplicity = last_struct.get("multiplicity")
 
         settings = cls.default()
         settings.charge = charge

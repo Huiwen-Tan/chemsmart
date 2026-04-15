@@ -23,25 +23,28 @@ def click_export_options(f):
         help="Path to the input database file (.db).",
     )
     @click.option(
-        "-i",
-        "--index",
+        "--ri",
+        "--record-index",
+        "record_index",
         type=int,
         default=None,
         help="Record index (1-based) to export.",
     )
     @click.option(
-        "--id",
+        "--rid",
+        "--record-id",
         "record_id",
         type=str,
         default=None,
         help="Record ID (or prefix, at least 12 chars) to export.",
     )
     @click.option(
-        "-m",
-        "--molecule",
+        "--si",
+        "--structure-index",
+        "structure_index",
         type=str,
         default="-1",
-        help="Molecule index (1-based) within the record. Default: -1 (last molecule).",
+        help="Structure index (1-based) within the record. Default: -1 (last structure).",
     )
     @click.option(
         "-k",
@@ -70,15 +73,15 @@ def click_export_options(f):
 @database.command(cls=MyCommand)
 @click_export_options
 @click.pass_context
-def export(ctx, file, index, record_id, molecule, keys, output):
+def export(ctx, file, record_index, record_id, structure_index, keys, output):
     """Export records from a chemsmart database.
 
     The output format is inferred from the file extension of -o/--output:
 
     \b
-      .json  – Full record data (or filtered by -i/--id)
+      .json  – Full record data (or filtered by --ri/--rid)
       .csv   – Scalar properties table (one row per record)
-      .xyz   – Molecule coordinates (single or multiple as frames; requires -i/--id)
+      .xyz   – Structure coordinates (single or multiple as frames; requires --ri/--rid)
 
     \b
     Default CSV columns: record_index, record_id, chemical_formula.
@@ -93,8 +96,8 @@ def export(ctx, file, index, record_id, molecule, keys, output):
     \b
     Examples:
         chemsmart run database export -f my.db -o my.json
-        chemsmart run database export -f my.db -i 4 -o last_mol.xyz
-        chemsmart run database export -f my.db -i 4 -m ':' -o all_mols.xyz
+        chemsmart run database export -f my.db --ri 4 -o mol.xyz
+        chemsmart run database export -f my.db --ri 4 --si ':' -o trajectory.xyz
         chemsmart run database export -f my.db -k total_energy,homo_energy,lumo_energy -o training_set.csv
     """
     # Validate input database
@@ -102,18 +105,18 @@ def export(ctx, file, index, record_id, molecule, keys, output):
     if not os.path.isfile(file):
         raise click.UsageError(f"Database file not found: {file}")
 
-    # Mutual exclusivity: -i and --id
-    if index is not None and record_id is not None:
+    # Mutual exclusivity: --ri and --rid
+    if record_index is not None and record_id is not None:
         raise click.UsageError(
-            "Options -i/--index and --id are mutually exclusive."
+            "Options --ri/--record-index and --rid/--record-id are mutually exclusive."
         )
 
-    # XYZ format requires -i/--id or --index
+    # XYZ format requires --ri/--rid
     ext = os.path.splitext(output)[1].lower()
     if ext == ".xyz":
-        if index is None and record_id is None:
+        if record_index is None and record_id is None:
             raise click.UsageError(
-                "XYZ export requires -i/--index or --id to select a record."
+                "XYZ export requires --ri/--record-index or --rid/--record-id to select a record."
             )
 
     output = os.path.abspath(output)
@@ -121,9 +124,9 @@ def export(ctx, file, index, record_id, molecule, keys, output):
     exporter = DatabaseExporter(
         db_file=file,
         output=output,
-        record_index=index,
+        record_index=record_index,
         record_id=record_id,
-        molecule_index=molecule,
+        structure_index=structure_index,
         keys=keys,
     )
 

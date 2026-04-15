@@ -1,6 +1,6 @@
 """
 Database inspection module for viewing database overview, record details,
-and molecule details.
+and structure details.
 """
 
 import logging
@@ -27,15 +27,17 @@ class DatabaseInspector:
     Provides three views:
     Overview – database-level metadata and statistics
     Record detail – full detail for one record
-    Molecule detail – full detail for one molecule within a record
+    Structure detail – full detail for one structure within a record
     """
 
-    def __init__(self, db_file, index=None, record_id=None, molecule=None):
+    def __init__(
+        self, db_file, index=None, record_id=None, structure_index=None
+    ):
         self.db_file = db_file
         self.db = Database(db_file)
         self.index = index
         self.record_id = record_id
-        self.molecule = molecule
+        self.structure_index = structure_index
 
     def resolve_id(self):
         """Return the full record_id from either index or partial ID."""
@@ -134,23 +136,23 @@ class DatabaseInspector:
             conn.close()
 
     def record_detail(self):
-        """Return full record data with molecule summaries."""
+        """Return full record data with structure summaries."""
         record_id = self.resolve_id()
         record = self.db.get_record(record_id=record_id)
         if record is None:
             raise ValueError(f"Record not found: {record_id}")
         return record
 
-    def molecule_detail(self):
-        """Return full molecule data for one molecule in a record."""
+    def structure_detail(self):
+        """Return full structure data for one structure in a record."""
         record = self.record_detail()
-        molecules = record.get("molecules", [])
-        for mol in molecules:
-            if mol.get("index") == self.molecule:
-                return record, mol
+        structures = record.get("structures", [])
+        for s in structures:
+            if s.get("index") == self.structure_index:
+                return record, s
         raise ValueError(
-            f"Molecule index {self.molecule} not found in record "
-            f"(available: {[m.get('index') for m in molecules]})."
+            f"Structure index {self.structure_index} not found in record "
+            f"(available: {[s.get('index') for s in structures]})."
         )
 
     def format_overview(self):
@@ -242,7 +244,7 @@ class DatabaseInspector:
         meta = record.get("meta", {})
         results = record.get("results", {})
         provenance = record.get("provenance", {})
-        molecules = record.get("molecules", [])
+        structures = record.get("structures", [])
 
         lines = []
         lines.append("")
@@ -423,19 +425,17 @@ class DatabaseInspector:
         )
         lines.append(format_kv("Assembled At", provenance.get("assembled_at")))
 
-        # Molecule summary table
-        if molecules:
+        # Structure summary table
+        if structures:
             lines.append("")
-            lines.append(separator(f"Molecules ({len(molecules)})"))
+            lines.append(separator(f"Structures ({len(structures)})"))
 
-            # Check whether identity fields are uniform across all molecules
-            formulas = {
-                (mol.get("chemical_formula") or "") for mol in molecules
-            }
-            charges = {mol.get("charge") for mol in molecules}
-            mults = {mol.get("multiplicity") for mol in molecules}
-            natoms = {mol.get("number_of_atoms") for mol in molecules}
-            smiles_set = {(mol.get("smiles") or "") for mol in molecules}
+            # Check whether identity fields are uniform across all structures
+            formulas = {(s.get("chemical_formula") or "") for s in structures}
+            charges = {s.get("charge") for s in structures}
+            mults = {s.get("multiplicity") for s in structures}
+            natoms = {s.get("number_of_atoms") for s in structures}
+            smiles_set = {(s.get("smiles") or "") for s in structures}
             uniform = (
                 len(formulas) == 1
                 and len(charges) == 1
@@ -463,17 +463,17 @@ class DatabaseInspector:
                 lines.append(
                     f"  {'----':>4}  {'--------------------':>20}  {'---------':>9}"
                 )
-                for mol in molecules:
-                    idx = mol.get("index", "-")
-                    energy = mol.get("energy")
+                for s in structures:
+                    idx = s.get("index", "-")
+                    energy = s.get("energy")
                     energy_str = (
                         format_energy(energy) if energy is not None else "N/A"
                     )
-                    is_opt = mol.get("is_optimized_structure")
+                    is_opt = s.get("is_optimized_structure")
                     opt_str = bool_to_str(is_opt) if is_opt is not None else ""
                     lines.append(f"  {idx:>4}  {energy_str:>20}  {opt_str:>9}")
             else:
-                # Heterogeneous molecules — show full info
+                # Heterogeneous structures — show full info
                 hdr = (
                     f"  {'Idx':>4}  {'Formula':<20}  {'Charge':>6}  "
                     f"{'Mult':>4}  {'Atoms':>5}  {'Energy (Eh)':>20}  {'SMILES':<30}"
@@ -483,17 +483,17 @@ class DatabaseInspector:
                     f"  {'----':>4}  {'-------':<20}  {'------':>6}  "
                     f"{'----':>4}  {'-----':>5}  {'--------------------':>20}  {'------':<30}"
                 )
-                for mol in molecules:
-                    idx = mol.get("index", "-")
-                    formula = mol.get("chemical_formula", "") or ""
-                    charge = mol.get("charge", "")
-                    mult = mol.get("multiplicity", "")
-                    natom = mol.get("number_of_atoms", "")
-                    energy = mol.get("energy")
+                for s in structures:
+                    idx = s.get("index", "-")
+                    formula = s.get("chemical_formula", "") or ""
+                    charge = s.get("charge", "")
+                    mult = s.get("multiplicity", "")
+                    natom = s.get("number_of_atoms", "")
+                    energy = s.get("energy")
                     energy_str = (
                         format_energy(energy) if energy is not None else ""
                     )
-                    smiles = mol.get("smiles", "") or ""
+                    smiles = s.get("smiles", "") or ""
                     lines.append(
                         f"  {idx:>4}  {formula:<20}  {charge:>6}  "
                         f"{mult:>4}  {natom:>5}  {energy_str:>20}  {smiles:<30}"
@@ -504,13 +504,13 @@ class DatabaseInspector:
         lines.append("")
         return "\n".join(lines)
 
-    def format_molecule_detail(self):
-        """Return a human-readable molecule detail string."""
-        record, mol = self.molecule_detail()
+    def format_structure_detail(self):
+        """Return a human-readable structure detail string."""
+        record, struct = self.structure_detail()
         provenance = record.get("provenance", {})
         lines = []
         lines.append("")
-        lines.append(separator("Molecule Detail"))
+        lines.append(separator("Structure Detail (within Record)"))
 
         # Context
         lines.append(format_kv("Record Index", record.get("record_index")))
@@ -522,29 +522,35 @@ class DatabaseInspector:
         )
         lines.append(
             format_kv(
-                "Structure Index in File", mol.get("structure_index_in_file")
+                "Structure Index in File",
+                struct.get("structure_index_in_file"),
             )
         )
+        lines.append(format_kv("Structure ID", struct.get("structure_id")))
 
         # Basic info
         lines.append("")
         lines.append(separator("Identity"))
-        lines.append(format_kv("Molecule Index", mol.get("index")))
+        lines.append(format_kv("Structure Index", struct.get("index")))
         lines.append(
-            format_kv("Chemical Formula", mol.get("chemical_formula"))
+            format_kv("Chemical Formula", struct.get("chemical_formula"))
         )
-        lines.append(format_kv("SMILES", mol.get("smiles")))
-        lines.append(format_kv("Charge", mol.get("charge")))
-        lines.append(format_kv("Multiplicity", mol.get("multiplicity")))
-        lines.append(format_kv("Number of Atoms", mol.get("number_of_atoms")))
-        lines.append(format_kv("Mass (amu)", format_float(mol.get("mass"), 4)))
+        lines.append(format_kv("SMILES", struct.get("smiles")))
+        lines.append(format_kv("Charge", struct.get("charge")))
+        lines.append(format_kv("Multiplicity", struct.get("multiplicity")))
         lines.append(
-            format_kv("Energy (Eh)", format_energy(mol.get("energy")))
+            format_kv("Number of Atoms", struct.get("number_of_atoms"))
+        )
+        lines.append(
+            format_kv("Mass (amu)", format_float(struct.get("mass"), 4))
+        )
+        lines.append(
+            format_kv("Energy (Eh)", format_energy(struct.get("energy")))
         )
 
         # Coordinates
-        symbols = mol.get("chemical_symbols", [])
-        positions = mol.get("positions", [])
+        symbols = struct.get("chemical_symbols", [])
+        positions = struct.get("positions", [])
         if symbols and positions:
             lines.append("")
             lines.append(separator(f"Coordinates ({len(symbols)} atoms, Å)"))
@@ -564,7 +570,7 @@ class DatabaseInspector:
                 )
 
         # Frozen atoms
-        frozen = mol.get("frozen_atoms")
+        frozen = struct.get("frozen_atoms")
         if frozen:
             lines.append("")
             lines.append(separator("Frozen Atoms"))
@@ -576,24 +582,30 @@ class DatabaseInspector:
         lines.append(
             format_kv(
                 "Is Optimized Structure",
-                bool_to_str(mol.get("is_optimized_structure")),
+                bool_to_str(struct.get("is_optimized_structure")),
             )
         )
-        lines.append(format_kv("Is Chiral", bool_to_str(mol.get("is_chiral"))))
-        lines.append(format_kv("Is Ring", bool_to_str(mol.get("is_ring"))))
         lines.append(
-            format_kv("Is Aromatic", bool_to_str(mol.get("is_aromatic")))
+            format_kv("Is Chiral", bool_to_str(struct.get("is_chiral")))
+        )
+        lines.append(format_kv("Is Ring", bool_to_str(struct.get("is_ring"))))
+        lines.append(
+            format_kv("Is Aromatic", bool_to_str(struct.get("is_aromatic")))
         )
         lines.append(
-            format_kv("Is Monoatomic", bool_to_str(mol.get("is_monoatomic")))
+            format_kv(
+                "Is Monoatomic", bool_to_str(struct.get("is_monoatomic"))
+            )
         )
         lines.append(
-            format_kv("Is Diatomic", bool_to_str(mol.get("is_diatomic")))
+            format_kv("Is Diatomic", bool_to_str(struct.get("is_diatomic")))
         )
-        lines.append(format_kv("Is Linear", bool_to_str(mol.get("is_linear"))))
+        lines.append(
+            format_kv("Is Linear", bool_to_str(struct.get("is_linear")))
+        )
 
         # Element counts
-        element_counts = mol.get("element_counts")
+        element_counts = struct.get("element_counts")
         if element_counts:
             lines.append("")
             lines.append(separator("Element Counts"))
@@ -601,7 +613,7 @@ class DatabaseInspector:
                 lines.append(f"  {elem:<4}: {cnt}")
 
         # Center of mass / moments of inertia
-        com = mol.get("center_of_mass")
+        com = struct.get("center_of_mass")
         if com is not None:
             lines.append("")
             lines.append(separator("Physical Properties"))
@@ -611,7 +623,7 @@ class DatabaseInspector:
                     f"[{', '.join(format_float(c, 6) for c in com)}]",
                 )
             )
-        moi = mol.get("moments_of_inertia")
+        moi = struct.get("moments_of_inertia")
         if moi is not None:
             lines.append(
                 format_kv(
@@ -619,12 +631,12 @@ class DatabaseInspector:
                     f"[{', '.join(format_float(v, 6) for v in moi)}]",
                 )
             )
-        rot_sym = mol.get("rotational_symmetry_number")
+        rot_sym = struct.get("rotational_symmetry_number")
         if rot_sym is not None:
             lines.append(format_kv("Rotational Symmetry Number", rot_sym))
 
         # Mulliken charges
-        mulliken = mol.get("mulliken_atomic_charges")
+        mulliken = struct.get("mulliken_atomic_charges")
         if mulliken is not None:
             lines.append("")
             lines.append(separator("Mulliken Atomic Charges"))
@@ -634,9 +646,9 @@ class DatabaseInspector:
                 lines.append(f"  {i:>4}  {atom:<6}  {q:>10.6f}")
 
         # Vibrational data
-        num_vib = mol.get("num_vibrational_modes")
+        num_vib = struct.get("num_vibrational_modes")
         if num_vib is not None:
-            freqs = mol.get("vibrational_frequencies", [])
+            freqs = struct.get("vibrational_frequencies", [])
             lines.append("")
             lines.append(
                 separator(f"Vibrational Frequencies ({num_vib} modes)")

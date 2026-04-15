@@ -33,37 +33,39 @@ class DatabaseFile(FileMixin):
     ):
         from chemsmart.io.molecules.structure import Molecule
 
-        def build_molecule_from_database(mol_dict):
-            """Convert a molecule dictionary to a Molecule object."""
-            vibrational_modes = mol_dict.get("vibrational_modes")
+        def build_molecule_from_database(struct_dict):
+            """Convert a structure dictionary from the database to a Molecule object."""
+            vibrational_modes = struct_dict.get("vibrational_modes")
             if vibrational_modes is not None:
                 vibrational_modes = [
                     np.array(mode) for mode in vibrational_modes
                 ]
             return Molecule(
-                symbols=mol_dict.get("chemical_symbols"),
-                positions=np.array(mol_dict.get("positions")),
-                charge=mol_dict.get("charge"),
-                multiplicity=mol_dict.get("multiplicity"),
-                energy=mol_dict.get("energy"),
+                symbols=struct_dict.get("chemical_symbols"),
+                positions=np.array(struct_dict.get("positions")),
+                charge=struct_dict.get("charge"),
+                multiplicity=struct_dict.get("multiplicity"),
+                energy=struct_dict.get("energy"),
                 forces=(
-                    np.array(mol_dict["forces"])
-                    if mol_dict.get("forces")
+                    np.array(struct_dict["forces"])
+                    if struct_dict.get("forces")
                     else None
                 ),
-                frozen_atoms=mol_dict.get("frozen_atoms"),
-                vibrational_frequencies=mol_dict.get(
+                frozen_atoms=struct_dict.get("frozen_atoms"),
+                vibrational_frequencies=struct_dict.get(
                     "vibrational_frequencies"
                 ),
                 vibrational_modes=vibrational_modes,
-                mulliken_atomic_charges=mol_dict.get(
+                mulliken_atomic_charges=struct_dict.get(
                     "mulliken_atomic_charges"
                 ),
-                rotational_symmetry_number=mol_dict.get(
+                rotational_symmetry_number=struct_dict.get(
                     "rotational_symmetry_number"
                 ),
-                is_optimized_structure=mol_dict.get("is_optimized_structure"),
-                structure_index_in_file=mol_dict.get(
+                is_optimized_structure=struct_dict.get(
+                    "is_optimized_structure"
+                ),
+                structure_index_in_file=struct_dict.get(
                     "structure_index_in_file"
                 ),
             )
@@ -84,21 +86,23 @@ class DatabaseFile(FileMixin):
         molecules = []
         index = string2index_1based(index)
         for record in records:
-            mol_dicts = record.get("molecules", [])
-            if not mol_dicts:
+            struct_dicts = record.get("structures", [])
+            if not struct_dicts:
                 continue
             if isinstance(index, int):
                 try:
-                    molecule = build_molecule_from_database(mol_dicts[index])
+                    molecule = build_molecule_from_database(
+                        struct_dicts[index]
+                    )
                     molecules.append(molecule)
                 except IndexError:
                     raise ValueError(
-                        f"Molecule index '{index}' out of range for record {record.get('record_index')}"
+                        f"Structure index '{index}' out of range for record {record.get('record_index')}"
                     )
             elif isinstance(index, slice):
                 molecule = [
-                    build_molecule_from_database(mol_dict)
-                    for mol_dict in mol_dicts[index]
+                    build_molecule_from_database(struct_dict)
+                    for struct_dict in struct_dicts[index]
                 ]
                 molecules.extend(molecule)
         if return_list:

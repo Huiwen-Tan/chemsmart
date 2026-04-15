@@ -1209,9 +1209,9 @@ class Molecule:
 
         Args:
             filepath (str): Path to the .db file.
-            index (str or int): Molecule index within the selected record(s).
-                Uses 1-based indexing. ``"-1"`` for the last molecule,
-                ``":"`` for all molecules.
+            index (str or int): Structure index within the selected record(s).
+                Uses 1-based indexing. ``"-1"`` for the last structure,
+                ``":"`` for all structures.
             return_list (bool): If True, always return a list.
             record_index (int or None): 1-based record index to select.
             record_id (str or None): Record ID (or prefix) to select.

@@ -47,7 +47,7 @@ class DatabaseExporter:
         output: Output file path (extension determines format).
         record_index: 1-based record index (mutually exclusive with *record_id*).
         record_id: Record ID or prefix (mutually exclusive with *record_index*).
-        molecule_index: 1-based molecule index within a record (XYZ export).
+        structure_index: 1-base structure index within a record (XYZ export).
         keys: Comma-separated string of extra scalar keys for CSV.
     """
 
@@ -57,14 +57,14 @@ class DatabaseExporter:
         output,
         record_index=None,
         record_id=None,
-        molecule_index=None,
+        structure_index=None,
         keys=None,
     ):
         self.db = Database(db_file)
         self.output = output
         self.record_index = record_index
         self.record_id = record_id
-        self.molecule_index = molecule_index
+        self.structure_index = structure_index
         self.keys = keys
         self.format = self.infer_format()
         self.parsed_keys = self.parse_csv_keys()
@@ -98,7 +98,7 @@ class DatabaseExporter:
             writer.writerows(rows)
 
     def to_xyz(self):
-        """Export molecule(s) from a record to an XYZ file."""
+        """Export structure(s) from a record to an XYZ file."""
         from chemsmart.io.molecules.structure import Molecule
 
         if self.record_index is None and self.record_id is None:
@@ -107,29 +107,29 @@ class DatabaseExporter:
             )
         mol = Molecule.from_filepath(
             self.db.db_file,
-            index=self.molecule_index,
+            index=self.structure_index,
             record_index=self.record_index,
             record_id=self.record_id,
         )
 
-        # Handle multiple molecules (list) or single molecule
+        # Handle multiple structures (list) or single structure
         if isinstance(mol, list):
             if not mol:
-                raise ValueError("No molecules found for the specified index")
+                raise ValueError("No structures found for the specified index")
             if len(mol) > 1:
                 logger.info(
-                    f"Exporting {len(mol)} molecules as frames in XYZ file: "
+                    f"Exporting {len(mol)} structures as frames in XYZ file: "
                     f"{os.path.basename(self.output)}"
                 )
-                # Write multiple molecules as frames
+                # Write multiple structures as frames
                 for i, m in enumerate(mol):
                     mode = "w" if i == 0 else "a"
                     m.write_xyz(self.output, mode=mode)
             else:
-                # Single molecule from list
+                # Single structure from list
                 mol[0].write_xyz(self.output, mode="w")
         else:
-            # Single molecule object
+            # Single structure object
             mol.write_xyz(self.output, mode="w")
 
     def get_records(self):
@@ -174,16 +174,16 @@ class DatabaseExporter:
         """Flatten a record dict into a single CSV row dict."""
         meta = record.get("meta", {})
         results = record.get("results", {})
-        molecules = record.get("molecules", [])
-        last_mol = molecules[-1] if molecules else {}
+        structures = record.get("structures", [])
+        last_struct = structures[-1] if structures else {}
         lookup = {
             "record_index": record.get("record_index"),
             "record_id": record.get("record_id"),
             **meta,
             **results,
-            "chemical_formula": last_mol.get("chemical_formula"),
-            "charge": last_mol.get("charge"),
-            "multiplicity": last_mol.get("multiplicity"),
-            "smiles": last_mol.get("smiles"),
+            "chemical_formula": last_struct.get("chemical_formula"),
+            "charge": last_struct.get("charge"),
+            "multiplicity": last_struct.get("multiplicity"),
+            "smiles": last_struct.get("smiles"),
         }
         return {col: lookup.get(col, "NaN") for col in columns}
