@@ -602,7 +602,7 @@ class Database:
             "record_id": record_id,
             "meta": self._extract_meta(record_row),
             "results": self._extract_results(record_row),
-            "structures": [
+            "molecules": [
                 self._record_structure_row_to_dict(dict(r))
                 for r in struct_rows
             ],
@@ -1203,58 +1203,3 @@ class Database:
             if key in row:
                 d[key] = row[key]
         return d
-
-    def query(self, where_clause):
-        """Query records with a SQL WHERE clause.
-
-        Args:
-            where_clause: SQL WHERE clause (without the WHERE keyword).
-
-        Returns:
-            List of full record dictionaries.
-        """
-        conn = sqlite3.connect(self.db_file)
-        conn.row_factory = sqlite3.Row
-        try:
-            sql = f"""
-                SELECT DISTINCT r.* FROM records r
-                LEFT JOIN record_structures rs ON r.record_id = rs.record_id
-                LEFT JOIN structures s ON rs.structure_id = s.structure_id
-                LEFT JOIN molecules m ON s.molecule_id = m.molecule_id
-                WHERE {where_clause}
-                ORDER BY r.record_index
-            """
-            cursor = conn.execute(sql)
-            rows = cursor.fetchall()
-            return [self._row_to_full_record(conn, dict(row)) for row in rows]
-        finally:
-            conn.close()
-
-    def query_summaries(self, where_clause):
-        """Query record summaries with a SQL WHERE clause.
-
-        Args:
-            where_clause: SQL WHERE clause (without the WHERE keyword).
-
-        Returns:
-            List of record summary dictionaries.
-        """
-        conn = sqlite3.connect(self.db_file)
-        conn.row_factory = sqlite3.Row
-        try:
-            sql = f"""
-                SELECT DISTINCT r.record_index, r.record_id, r.program,
-                       r.functional, r.basis, r.jobtype, r.total_energy,
-                       m.chemical_formula, s.charge, s.multiplicity
-                FROM records r
-                LEFT JOIN record_structures rs ON r.record_id = rs.record_id
-                LEFT JOIN structures s ON rs.structure_id = s.structure_id
-                LEFT JOIN molecules m ON s.molecule_id = m.molecule_id
-                WHERE {where_clause}
-                ORDER BY r.record_index
-            """
-            cursor = conn.execute(sql)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            conn.close()

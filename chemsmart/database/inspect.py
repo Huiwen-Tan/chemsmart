@@ -146,13 +146,13 @@ class DatabaseInspector:
     def structure_detail(self):
         """Return full structure data for one structure in a record."""
         record = self.record_detail()
-        structures = record.get("structures", [])
-        for s in structures:
+        molecules = record.get("molecules", [])
+        for s in molecules:
             if s.get("index") == self.structure_index:
                 return record, s
         raise ValueError(
             f"Structure index {self.structure_index} not found in record "
-            f"(available: {[s.get('index') for s in structures]})."
+            f"(available: {[s.get('index') for s in molecules]})."
         )
 
     def format_overview(self):
@@ -244,7 +244,7 @@ class DatabaseInspector:
         meta = record.get("meta", {})
         results = record.get("results", {})
         provenance = record.get("provenance", {})
-        structures = record.get("structures", [])
+        molecules = record.get("molecules", [])
 
         lines = []
         lines.append("")
@@ -426,16 +426,16 @@ class DatabaseInspector:
         lines.append(format_kv("Assembled At", provenance.get("assembled_at")))
 
         # Structure summary table
-        if structures:
+        if molecules:
             lines.append("")
-            lines.append(separator(f"Structures ({len(structures)})"))
+            lines.append(separator(f"Structures ({len(molecules)})"))
 
-            # Check whether identity fields are uniform across all structures
-            formulas = {(s.get("chemical_formula") or "") for s in structures}
-            charges = {s.get("charge") for s in structures}
-            mults = {s.get("multiplicity") for s in structures}
-            natoms = {s.get("number_of_atoms") for s in structures}
-            smiles_set = {(s.get("smiles") or "") for s in structures}
+            # Check whether identity fields are uniform across all molecules
+            formulas = {(s.get("chemical_formula") or "") for s in molecules}
+            charges = {s.get("charge") for s in molecules}
+            mults = {s.get("multiplicity") for s in molecules}
+            natoms = {s.get("number_of_atoms") for s in molecules}
+            smiles_set = {(s.get("smiles") or "") for s in molecules}
             uniform = (
                 len(formulas) == 1
                 and len(charges) == 1
@@ -463,7 +463,7 @@ class DatabaseInspector:
                 lines.append(
                     f"  {'----':>4}  {'--------------------':>20}  {'---------':>9}"
                 )
-                for s in structures:
+                for s in molecules:
                     idx = s.get("index", "-")
                     energy = s.get("energy")
                     energy_str = (
@@ -483,7 +483,7 @@ class DatabaseInspector:
                     f"  {'----':>4}  {'-------':<20}  {'------':>6}  "
                     f"{'----':>4}  {'-----':>5}  {'--------------------':>20}  {'------':<30}"
                 )
-                for s in structures:
+                for s in molecules:
                     idx = s.get("index", "-")
                     formula = s.get("chemical_formula", "") or ""
                     charge = s.get("charge", "")

@@ -174,16 +174,16 @@ class DatabaseExporter:
         """Flatten a record dict into a single CSV row dict."""
         meta = record.get("meta", {})
         results = record.get("results", {})
-        structures = record.get("structures", [])
-        last_struct = structures[-1] if structures else {}
+        molecules = record.get("molecules", [])
+        last_mol = molecules[-1] if molecules else {}
         lookup = {
             "record_index": record.get("record_index"),
             "record_id": record.get("record_id"),
             **meta,
             **results,
-            "chemical_formula": last_struct.get("chemical_formula"),
-            "charge": last_struct.get("charge"),
-            "multiplicity": last_struct.get("multiplicity"),
-            "smiles": last_struct.get("smiles"),
+            "chemical_formula": last_mol.get("chemical_formula"),
+            "charge": last_mol.get("charge"),
+            "multiplicity": last_mol.get("multiplicity"),
+            "smiles": last_mol.get("smiles"),
         }
         return {col: lookup.get(col, "NaN") for col in columns}

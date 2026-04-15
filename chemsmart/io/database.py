@@ -86,14 +86,12 @@ class DatabaseFile(FileMixin):
         molecules = []
         index = string2index_1based(index)
         for record in records:
-            struct_dicts = record.get("structures", [])
-            if not struct_dicts:
+            mol_dicts = record.get("molecules", [])
+            if not mol_dicts:
                 continue
             if isinstance(index, int):
                 try:
-                    molecule = build_molecule_from_database(
-                        struct_dicts[index]
-                    )
+                    molecule = build_molecule_from_database(mol_dicts[index])
                     molecules.append(molecule)
                 except IndexError:
                     raise ValueError(
@@ -101,8 +99,8 @@ class DatabaseFile(FileMixin):
                     )
             elif isinstance(index, slice):
                 molecule = [
-                    build_molecule_from_database(struct_dict)
-                    for struct_dict in struct_dicts[index]
+                    build_molecule_from_database(mol_dict)
+                    for mol_dict in mol_dicts[index]
                 ]
                 molecules.extend(molecule)
         if return_list:
