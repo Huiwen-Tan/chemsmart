@@ -6,7 +6,6 @@ import click
 
 from chemsmart.database.query import DatabaseQuery
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.io import resolve_output_path
 
 from .database import database
 
@@ -24,31 +23,33 @@ def click_query_options(f):
         help="Path to the input database file (.db).",
     )
     @click.option(
+        "-t",
+        "--target",
+        type=click.Choice(
+            ["records", "molecules", "structures"], case_sensitive=False
+        ),
+        default="records",
+        help="Query target: records (default), molecules, or structures.",
+    )
+    @click.option(
         "-q",
         "--query",
         type=str,
         default=None,
         help=(
             "Query expression. "
-            "If omitted, all records are shown. "
+            "If omitted, all entities are shown. "
             "Supported operators: <, <=, >, >=, =, !=, ~. "
             "Logical: AND, OR. "
             "Example: \"fmo_gap < 7 AND program = 'gaussian'\""
         ),
     )
     @click.option(
-        "-o",
-        "--output",
-        type=str,
-        default=None,
-        help="Output database file (.db) for saving matching records. ",
-    )
-    @click.option(
         "-l",
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of records to query.",
+        help="Maximum number of results to display.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -60,56 +61,52 @@ def click_query_options(f):
 @database.command(cls=MyCommand)
 @click_query_options
 @click.pass_context
-def query(ctx, file, query, output, limit):
-    """Query records from a chemsmart database.
+def query(ctx, file, target, query, limit):
+    """Query records, molecules, or structures from a chemsmart database.
 
-    Filter records using a query expression and optionally export the
-    matching subset to a new database file. If no query is provided,
-    all records are displayed.
+    Use -t, --target to switch the query perspective:
 
-    Supported logical operators: AND, OR
+    \b
+      -t records (default):
+        Query calculation records.
+        Fields: source_file, jobtype, program, functional, basis, total_energy,
+        solvent_on, solvent_model, homo_energy, lumo_energy, fmo_gap,
+        zero_point_energy, enthalpy, entropy, gibbs_free_energy,
 
-    Supported comparison operators: <, <=, >, >=, =, !=, ~ (substring match)
+    \b
+      -t molecules:
+        Query unique chemical species.
+        Fields: chemical_formula, smiles, number_of_atoms, mass
 
-    Supported fields: record_id, program, functional, basis, jobtype,
-    solvent_on, charge, multiplicity, chemical_formula, smiles,
-    number_of_atoms, total_energy, homo_energy, lumo_energy, fmo_gap,
-    zero_point_energy, enthalpy, entropy, gibbs_free_energy, source_file
+    \b
+      -t structures:
+        Query 3D conformers.
+        Fields: chemical_formula, number_of_atoms, charge,
+        multiplicity
 
-    Note: For molecule-level fields (charge, multiplicity, chemical_formula,
-    smiles, number_of_atoms), a record matches if ANY molecule in the record
-    satisfies the condition.
+    Supported operators: <, <=, >, >=, =, !=, ~ (substring match)
+
+    Logical: AND, OR
 
     \b
     Examples:
-        chemsmart run database query -f database.db
-        chemsmart run database query -f database.db -l 10
-        chemsmart run database query -f my.db -q "chemical_formula = 'CO2'" -o co2.db
+        chemsmart run database query -f my.db
         chemsmart run database query -f my.db -q "fmo_gap < 7 AND program = 'gaussian'"
         chemsmart run database query -f my.db -q "source_file ~ 'benzene'"
+        chemsmart run database query -f my.db -t molecules
+        chemsmart run database query -f my.db -t molecules -q "mass > 100"
+        chemsmart run database query -f my.db -t structures -l 10
     """
     # Validate input database
     file = os.path.abspath(file)
     if not os.path.isfile(file):
         raise FileNotFoundError(f"Database file not found: {file}")
 
-    # Prepare output file path if exporting
-    if output is not None:
-        if not output.lower().endswith(".db"):
-            output = output + ".db"
-
-        output, renamed = resolve_output_path(file, output)
-        if renamed:
-            logger.warning(
-                f"Input and output files are the same ({os.path.basename(file)}). "
-                f"Writing to {os.path.basename(output)} to avoid overwrite."
-            )
-
     if limit is not None:
         if limit <= 0:
             raise click.BadParameter("Limit must be a positive integer.")
 
-    dq = DatabaseQuery(file, query, output, limit)
+    dq = DatabaseQuery(file, query, target=target, limit=limit)
 
     # Run query for summaries (terminal display)
     try:
@@ -119,17 +116,14 @@ def query(ctx, file, query, output, limit):
         return None
 
     # Log query results
-    total_count = dq.count_records()
+    entity = dq._config["entity_name"]
+    total_count = dq.count_total()
     logger.info(
-        f"Query returned {len(summaries)} of {total_count} record(s) in {os.path.basename(file)}."
+        f"Query returned {len(summaries)} of {total_count} {entity}(s) "
+        f"in {os.path.basename(file)}."
     )
 
     # Print formatted summary
     print("\n" + dq.format_summary(summaries) + "\n")
-
-    # Export to new database if requested
-    if output is not None and summaries:
-        records = dq.query()
-        dq.export_to_db(records)
 
     return None
