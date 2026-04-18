@@ -152,7 +152,7 @@ TARGET_CONFIG = {
             SELECT
                 s.structure_id, s.molecule_id, m.chemical_formula,
                 s.charge, s.multiplicity, 
-                (SELECT COUNT(*) FROM record_structures rs2
+                (SELECT COUNT(DISTINCT rs2.record_id) FROM record_structures rs2
                  WHERE rs2.structure_id = s.structure_id) AS num_records
             {_STRUCTURES_JOIN}
         """,
@@ -160,7 +160,7 @@ TARGET_CONFIG = {
         "count_matched_template": (
             f"SELECT COUNT(*) {_STRUCTURES_JOIN} WHERE {{where}}"
         ),
-        "order_by": "m.chemical_formula, s.structure_id",
+        "order_by": "s.molecule_id, s.structure_id",
         "table_columns": [
             ("Structure ID", "structure_id", 13, "<"),
             ("Charge", "charge", 7, ">"),

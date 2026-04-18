@@ -24,20 +24,30 @@ logger = logging.getLogger(__name__)
 class DatabaseInspector:
     """Inspect a chemsmart database.
 
-    Provides three views:
+    Provides five views:
     Overview – database-level metadata and statistics
     Record detail – full detail for one record
     Structure detail – full detail for one structure within a record
+    Molecule detail – full detail for a molecule (chemical species)
+    Standalone structure detail – full detail for a structure (conformer)
     """
 
     def __init__(
-        self, db_file, index=None, record_id=None, structure_index=None
+        self,
+        db_file,
+        index=None,
+        record_id=None,
+        structure_index=None,
+        molecule_id=None,
+        structure_id=None,
     ):
         self.db_file = db_file
         self.db = Database(db_file)
         self.index = index
         self.record_id = record_id
         self.structure_index = structure_index
+        self.molecule_id = molecule_id
+        self.structure_id = structure_id
 
     def resolve_id(self):
         """Return the full record_id from either index or partial ID."""
@@ -435,7 +445,6 @@ class DatabaseInspector:
             charges = {s.get("charge") for s in molecules}
             mults = {s.get("multiplicity") for s in molecules}
             natoms = {s.get("number_of_atoms") for s in molecules}
-            smiles_set = {(s.get("smiles") or "") for s in molecules}
             uniform = (
                 len(formulas) == 1
                 and len(charges) == 1
@@ -448,56 +457,61 @@ class DatabaseInspector:
                 formula = next(iter(formulas))
                 charge = next(iter(charges))
                 mult = next(iter(mults))
-                natom = next(iter(natoms))
-                smiles = next(iter(smiles_set))
                 lines.append(format_kv("Formula", formula or "N/A"))
                 lines.append(format_kv("Charge", charge))
                 lines.append(format_kv("Multiplicity", mult))
-                lines.append(format_kv("Atoms", natom))
-                if smiles:
-                    lines.append(format_kv("SMILES", smiles))
                 lines.append("")
                 lines.append(
-                    f"  {'Idx':>4}  {'Energy (Eh)':>20}  {'Optimized':>9}"
+                    f"  {'Idx':>4}  {'Structure ID':<12}  {'Energy (Eh)':>15}  {'Optimized':>9}"
                 )
                 lines.append(
-                    f"  {'----':>4}  {'--------------------':>20}  {'---------':>9}"
+                    f"  {'----':>4}  {'------------':<12}  {'---------------':>15}  {'---------':>9}"
                 )
                 for s in molecules:
                     idx = s.get("index", "-")
+                    sid = str(s.get("structure_id", ""))[:12]
                     energy = s.get("energy")
                     energy_str = (
                         format_energy(energy) if energy is not None else "N/A"
                     )
                     is_opt = s.get("is_optimized_structure")
                     opt_str = bool_to_str(is_opt) if is_opt is not None else ""
-                    lines.append(f"  {idx:>4}  {energy_str:>20}  {opt_str:>9}")
+                    lines.append(
+                        f"  {idx:>4}  {sid:<12}  {energy_str:>15}  {opt_str:>9}"
+                    )
             else:
                 # Heterogeneous structures — show full info
                 hdr = (
-                    f"  {'Idx':>4}  {'Formula':<20}  {'Charge':>6}  "
-                    f"{'Mult':>4}  {'Atoms':>5}  {'Energy (Eh)':>20}  {'SMILES':<30}"
+                    f"  {'Idx':>4}  {'Structure ID':<12}  {'Formula':<20}  {'Charge':>6}  "
+                    f"{'Mult':>4}  {'Energy (Eh)':>15}"
                 )
                 lines.append(hdr)
                 lines.append(
-                    f"  {'----':>4}  {'-------':<20}  {'------':>6}  "
-                    f"{'----':>4}  {'-----':>5}  {'--------------------':>20}  {'------':<30}"
+                    f"  {'----':>4}  {'------------':<12}  {'-------':<20}  {'------':>6}  "
+                    f"{'----':>4}  {'---------------':>15}"
                 )
                 for s in molecules:
                     idx = s.get("index", "-")
+                    sid = str(s.get("structure_id", ""))[:12]
                     formula = s.get("chemical_formula", "") or ""
                     charge = s.get("charge", "")
                     mult = s.get("multiplicity", "")
-                    natom = s.get("number_of_atoms", "")
                     energy = s.get("energy")
                     energy_str = (
                         format_energy(energy) if energy is not None else ""
                     )
-                    smiles = s.get("smiles", "") or ""
                     lines.append(
-                        f"  {idx:>4}  {formula:<20}  {charge:>6}  "
-                        f"{mult:>4}  {natom:>5}  {energy_str:>20}  {smiles:<30}"
+                        f"  {idx:>4}  {sid:<12}  {formula:<20}  {charge:>6}  "
+                        f"{mult:>4}  {energy_str:>15}"
                     )
+
+        db_name = os.path.basename(self.db_file)
+        rid = str(record.get("record_id"))[:12]
+        lines.append("")
+        lines.append(
+            f"  Tip: chemsmart run database inspect -f {db_name}"
+            f" --rid {rid} --si <structure index>"
+        )
 
         lines.append("")
         lines.append(separator())
@@ -510,7 +524,7 @@ class DatabaseInspector:
         provenance = record.get("provenance", {})
         lines = []
         lines.append("")
-        lines.append(separator("Structure Detail (within Record)"))
+        lines.append(separator("Record Context"))
 
         # Context
         lines.append(format_kv("Record Index", record.get("record_index")))
@@ -526,27 +540,28 @@ class DatabaseInspector:
                 struct.get("structure_index_in_file"),
             )
         )
-        lines.append(format_kv("Structure ID", struct.get("structure_id")))
+        lines.append(
+            format_kv("Energy (Eh)", format_energy(struct.get("energy")))
+        )
 
         # Basic info
         lines.append("")
-        lines.append(separator("Identity"))
-        lines.append(format_kv("Structure Index", struct.get("index")))
-        lines.append(
-            format_kv("Chemical Formula", struct.get("chemical_formula"))
-        )
-        lines.append(format_kv("SMILES", struct.get("smiles")))
+        lines.append(separator("Structure Detail"))
+        lines.append(format_kv("Structure ID", struct.get("structure_id")))
         lines.append(format_kv("Charge", struct.get("charge")))
         lines.append(format_kv("Multiplicity", struct.get("multiplicity")))
+
+        # Molecule-level identity fields
+        lines.append("")
+        lines.append(separator("Parent Molecule"))
+        lines.append(format_kv("Molecule ID", struct.get("molecule_id")))
         lines.append(
-            format_kv("Number of Atoms", struct.get("number_of_atoms"))
+            format_kv("Chemical Formula", struct.get("chemical_formula"))
         )
         lines.append(
             format_kv("Mass (amu)", format_float(struct.get("mass"), 4))
         )
-        lines.append(
-            format_kv("Energy (Eh)", format_energy(struct.get("energy")))
-        )
+        lines.append(format_kv("SMILES", struct.get("smiles")))
 
         # Coordinates
         symbols = struct.get("chemical_symbols", [])
@@ -575,42 +590,6 @@ class DatabaseInspector:
             lines.append("")
             lines.append(separator("Frozen Atoms"))
             lines.append(f"  {frozen}")
-
-        # Structure properties
-        lines.append("")
-        lines.append(separator("Structure Properties"))
-        lines.append(
-            format_kv(
-                "Is Optimized Structure",
-                bool_to_str(struct.get("is_optimized_structure")),
-            )
-        )
-        lines.append(
-            format_kv("Is Chiral", bool_to_str(struct.get("is_chiral")))
-        )
-        lines.append(format_kv("Is Ring", bool_to_str(struct.get("is_ring"))))
-        lines.append(
-            format_kv("Is Aromatic", bool_to_str(struct.get("is_aromatic")))
-        )
-        lines.append(
-            format_kv(
-                "Is Monoatomic", bool_to_str(struct.get("is_monoatomic"))
-            )
-        )
-        lines.append(
-            format_kv("Is Diatomic", bool_to_str(struct.get("is_diatomic")))
-        )
-        lines.append(
-            format_kv("Is Linear", bool_to_str(struct.get("is_linear")))
-        )
-
-        # Element counts
-        element_counts = struct.get("element_counts")
-        if element_counts:
-            lines.append("")
-            lines.append(separator("Element Counts"))
-            for elem, cnt in sorted(element_counts.items()):
-                lines.append(f"  {elem:<4}: {cnt}")
 
         # Center of mass / moments of inertia
         com = struct.get("center_of_mass")
@@ -663,3 +642,246 @@ class DatabaseInspector:
         lines.append(separator())
         lines.append("")
         return "\n".join(lines)
+
+    def molecule_detail(self):
+        """Return molecule data with related structures and records.
+
+        Returns:
+            tuple: (molecule_dict, structures_list, records_list)
+        """
+        full_id = self.db.get_molecule_by_partial_id(self.molecule_id)
+        molecule = self.db.get_molecule(full_id)
+        if molecule is None:
+            raise ValueError(f"Molecule not found: {full_id}")
+        structures = self.db.get_structures_for_molecule(full_id)
+        records = self.db.get_records_for_molecule(full_id)
+        return molecule, structures, records
+
+    def format_molecule_detail(self):
+        """Return a human-readable molecule detail string."""
+        molecule, structures, records = self.molecule_detail()
+        lines = []
+        lines.append("")
+        lines.append(separator("Molecule Detail"))
+
+        # Core attributes
+        lines.append(format_kv("Molecule ID", molecule.get("molecule_id")))
+        lines.append(
+            format_kv("Chemical Formula", molecule.get("chemical_formula"))
+        )
+        lines.append(
+            format_kv("Mass (amu)", format_float(molecule.get("mass"), 4))
+        )
+
+        # Compact boolean properties as tags
+        tag_map = {
+            "aromatic": (molecule.get("is_aromatic"), "nonaromatic"),
+            "chiral": (molecule.get("is_chiral"), "achiral"),
+            "linear": (molecule.get("is_linear"), "nonlinear"),
+            "multicomponent": (
+                molecule.get("is_multicomponent"),
+                "monocomponent",
+            ),
+        }
+        active_tags = sorted(k for k, (v, _) in tag_map.items() if v)
+        inactive_tags = sorted(neg for k, (v, neg) in tag_map.items() if not v)
+        tags_str = ", ".join(active_tags + inactive_tags) or "(none)"
+        lines.append(format_kv("Tags", tags_str))
+
+        # Representation
+        lines.append("")
+        lines.append(separator("Representation"))
+        lines.append(format_kv("SMILES", molecule.get("smiles")))
+        lines.append(format_kv("InChI", molecule.get("inchi")))
+
+        # Compact element counts
+        element_counts = molecule.get("element_counts")
+        if element_counts:
+            n_atoms = molecule.get("number_of_atoms", "")
+            n_elems = len(element_counts)
+            lines.append("")
+            lines.append(
+                separator(f"Composition: {n_elems} Elements, {n_atoms} Atoms")
+            )
+            counts_str = "  " + "  ".join(
+                f"{elem} {cnt}" for elem, cnt in sorted(element_counts.items())
+            )
+            lines.append(counts_str)
+
+        # Structures (conformers) table
+        lines.append("")
+        lines.append(separator(f"Conformers: {len(structures)}"))
+        if structures:
+            lines.append(f"  {'Structure ID':<12}  {'Charge':>6}  {'Mult':>4}")
+            lines.append(f"  {'------------':<12}  {'------':>6}  {'----':>4}")
+            for s in sorted(
+                structures,
+                key=lambda x: (
+                    x.get("charge") or 0,
+                    x.get("multiplicity") or 0,
+                ),
+            ):
+                sid = str(s.get("structure_id", ""))[:12]
+                charge = s.get("charge", "")
+                mult = s.get("multiplicity", "")
+                lines.append(f"  {sid:<12}  {charge:>6}  {mult:>4}")
+        else:
+            lines.append("  (none)")
+
+        db_name = os.path.basename(self.db_file)
+        lines.append("")
+        lines.append(
+            f"  Tip: chemsmart run database inspect -f {db_name}"
+            f" --sid <structure id>"
+        )
+
+        # Related records table
+        lines.append("")
+        lines.extend(self._format_related_records_table(records))
+
+        lines.append("")
+        lines.append(
+            f"  Tip: chemsmart run database inspect -f {db_name}"
+            f" --rid <record id>"
+        )
+
+        lines.append("")
+        lines.append(separator())
+        lines.append("")
+        return "\n".join(lines)
+
+    def standalone_structure_detail(self):
+        """Return structure data with related records (standalone view).
+
+        Unlike structure_detail() which shows a structure in record context
+        (including per-calculation data like vibrational frequencies), this
+        method presents the structure from the structures table directly.
+
+        Returns:
+            tuple: (structure_dict, records_list)
+        """
+        full_id = self.db.get_structure_by_partial_id(self.structure_id)
+        structure = self.db.get_structure(full_id)
+        if structure is None:
+            raise ValueError(f"Structure not found: {full_id}")
+        records = self.db.get_records_for_structure(full_id)
+        return structure, records
+
+    def format_standalone_structure_detail(self):
+        """Return a human-readable standalone structure detail string."""
+        structure, records = self.standalone_structure_detail()
+        lines = []
+        lines.append("")
+        lines.append(separator("Structure Detail"))
+        lines.append(format_kv("Structure ID", structure.get("structure_id")))
+        lines.append(format_kv("Charge", structure.get("charge")))
+        lines.append(format_kv("Multiplicity", structure.get("multiplicity")))
+
+        # Molecule-level identity fields
+        lines.append("")
+        lines.append(separator("Parent Molecule"))
+        lines.append(format_kv("Molecule ID", structure.get("molecule_id")))
+        lines.append(
+            format_kv("Chemical Formula", structure.get("chemical_formula"))
+        )
+        lines.append(
+            format_kv("Mass (amu)", format_float(structure.get("mass"), 4))
+        )
+        lines.append(format_kv("SMILES", structure.get("smiles")))
+
+        # Coordinates
+        symbols = structure.get("chemical_symbols", [])
+        positions = structure.get("positions", [])
+        if symbols and positions:
+            lines.append("")
+            lines.append(separator(f"Coordinates ({len(symbols)} atoms, Å)"))
+            lines.append(
+                f"  {'Idx':>4}  {'Elem':<4}  "
+                f"{'X':>14}  {'Y':>14}  {'Z':>14}"
+            )
+            lines.append(
+                f"  {'----':>4}  {'----':<4}  "
+                f"{'----------':>14}  {'----------':>14}  {'----------':>14}"
+            )
+            for i, (sym, pos) in enumerate(zip(symbols, positions)):
+                x, y, z = pos
+                lines.append(
+                    f"  {i + 1:>4}  {sym:<4}  "
+                    f"{x:>14.8f}  {y:>14.8f}  {z:>14.8f}"
+                )
+
+        # Physical properties
+        com = structure.get("center_of_mass")
+        moi = structure.get("moments_of_inertia")
+        if com is not None or moi is not None:
+            lines.append("")
+            lines.append(separator("Physical Properties"))
+            if com is not None:
+                lines.append(
+                    format_kv(
+                        "Center of Mass (Å)",
+                        f"[{', '.join(format_float(c, 6) for c in com)}]",
+                    )
+                )
+            if moi is not None:
+                lines.append(
+                    format_kv(
+                        "Moments of Inertia (amu·Å²)",
+                        f"[{', '.join(format_float(v, 6) for v in moi)}]",
+                    )
+                )
+
+        db_name = os.path.basename(self.db_file)
+        # Related records table
+        lines.append("")
+        lines.extend(self._format_related_records_table(records))
+
+        lines.append("")
+        lines.append(
+            f"  Tip: chemsmart run database inspect -f {db_name}"
+            f" --rid <record id>"
+        )
+
+        lines.append("")
+        lines.append(separator())
+        lines.append("")
+        return "\n".join(lines)
+
+    def _format_related_records_table(self, records):
+        """Format a Related Records table section.
+
+        Args:
+            records: list of record summary dicts from
+                db.get_records_for_molecule() or db.get_records_for_structure()
+
+        Returns:
+            list[str]: formatted lines
+        """
+        lines = []
+        lines.append(separator(f"Related Records: {len(records)}"))
+
+        if not records:
+            lines.append("  (none)")
+            return lines
+
+        lines.append(
+            f"  {'Record ID':<12}  {'Job':<8}  {'Program':<8}  "
+            f"{'Method':<12}  {'Basis':<14}  {'Energy (Eh)':<15}"
+        )
+        lines.append(
+            f"  {'------------':<12}  {'--------':<8}  {'--------':<8}  "
+            f"{'------------':<12}  {'--------------':<14}  {'---------------':<15}"
+        )
+        for r in records:
+            rid = str(r.get("record_id", ""))[:12]
+            job = r.get("jobtype", "") or ""
+            prog = r.get("program", "") or ""
+            func = r.get("functional", "") or ""
+            basis = r.get("basis", "") or ""
+            energy = r.get("total_energy")
+            energy_str = format_energy(energy) if energy is not None else ""
+            lines.append(
+                f"  {rid:<12}  {job:<8}  {prog:<8}  "
+                f"{func:<12}  {basis:<14}  {energy_str:<15}"
+            )
+        return lines

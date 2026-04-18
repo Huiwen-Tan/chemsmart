@@ -46,6 +46,22 @@ def click_inspect_options(f):
         default=None,
         help="Structure index (1-based) within the record.",
     )
+    @click.option(
+        "--mid",
+        "--molecule-id",
+        "molecule_id",
+        type=str,
+        default=None,
+        help="Molecule ID (or prefix, at least 16 chars) to inspect.",
+    )
+    @click.option(
+        "--sid",
+        "--structure-id",
+        "structure_id",
+        type=str,
+        default=None,
+        help="Structure ID (or prefix, at least 12 chars) to inspect.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
@@ -56,12 +72,25 @@ def click_inspect_options(f):
 @database.command(cls=MyCommand)
 @click_inspect_options
 @click.pass_context
-def inspect(ctx, file, record_index, record_id, structure_index):
-    """Inspect a chemsmart database, record, or structure.
+def inspect(
+    ctx,
+    file,
+    record_index,
+    record_id,
+    structure_index,
+    molecule_id,
+    structure_id,
+):
+    """Inspect a chemsmart database, record, molecule, or structure.
 
-    Without --ri/--rid, show a database overview (metadata and statistics).
+    Without entity options, show a database overview (metadata and statistics).
     With --ri or --rid, show detailed information for one record.
-    With --ri/--rid and --si, show detailed information for one structure.
+    With --ri/--rid and --si, show detailed information for one structure within a record.
+    With --mid, show detailed information for a molecule (chemical species).
+    With --sid, show detailed information for a structure (conformer).
+
+    Options --ri, --rid, --mid, and --sid are mutually exclusive.
+    Option --si requires --ri or --rid.
 
     \b
     Examples:
@@ -69,17 +98,27 @@ def inspect(ctx, file, record_index, record_id, structure_index):
         chemsmart run database inspect -f my.db --ri 3
         chemsmart run database inspect -f my.db --rid a1b2c3d4e5f6
         chemsmart run database inspect -f my.db --ri 3 --si 1
+        chemsmart run database inspect -f my.db --mid CURLTUGMZLYLDI-U
+        chemsmart run database inspect -f my.db --sid c4d5e6f78a9b
     """
     # Validate input database
     file = os.path.abspath(file)
     if not os.path.isfile(file):
         raise click.UsageError(f"Database file not found: {file}")
 
-    # Mutual exclusivity: --ri and --rid
-    if record_index is not None and record_id is not None:
-        raise click.UsageError(
-            "Options --ri/--record-index and --rid/--record-id are mutually exclusive."
-        )
+    # Mutual exclusivity: --ri / --rid / --mid / --sid
+    entity_options = [
+        ("--ri/--record-index", record_index),
+        ("--rid/--record-id", record_id),
+        ("--mid/--molecule-id", molecule_id),
+        ("--sid/--structure-id", structure_id),
+    ]
+    specified = [
+        (name, val) for name, val in entity_options if val is not None
+    ]
+    if len(specified) > 1:
+        names = " and ".join(name for name, _ in specified)
+        raise click.UsageError(f"Options {names} are mutually exclusive.")
 
     # --si requires --ri or --rid
     if (
@@ -96,9 +135,21 @@ def inspect(ctx, file, record_index, record_id, structure_index):
         index=record_index,
         record_id=record_id,
         structure_index=structure_index,
+        molecule_id=molecule_id,
+        structure_id=structure_id,
     )
 
-    if record_index is None and record_id is None:
+    if molecule_id is not None:
+        logger.info(
+            f"Displaying molecule with ID {molecule_id} from {os.path.basename(file)}."
+        )
+        print(inspector.format_molecule_detail())
+    elif structure_id is not None:
+        logger.info(
+            f"Displaying structure with ID {structure_id} from {os.path.basename(file)}."
+        )
+        print(inspector.format_standalone_structure_detail())
+    elif record_index is None and record_id is None:
         # Database overview
         logger.info(
             f"Displaying database overview for {os.path.basename(file)}."

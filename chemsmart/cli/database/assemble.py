@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
     "--index",
     default=":",
     show_default=True,
-    help="Index (1-based) of the molecule to extract from multi-molecule files.",
+    help="Index (1-based) of the structures to extract from multi-structure files.",
 )
 @click.option(
     "-o",
@@ -88,7 +88,9 @@ def assemble(
     if program is None:
         logger.info(f"Found {len(files)} output files, assembling...")
     else:
-        logger.info(f"Found {len(files)} {program} files, assembling...")
+        logger.info(
+            f"Found {len(files)} {program} output files, assembling..."
+        )
 
     # Parse all collected files
     rows = []
