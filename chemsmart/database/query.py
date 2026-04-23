@@ -44,7 +44,7 @@ TARGET_CONFIG = {
         "entity_name": "record",
         "queryable_fields": {
             "program": "r.program",
-            "functional": "r.functional",
+            "method": "r.method",
             "basis": "r.basis",
             "jobtype": "r.jobtype",
             "solvent_on": "r.solvent_on",
@@ -61,7 +61,7 @@ TARGET_CONFIG = {
         },
         "summary_select": f"""
             SELECT DISTINCT
-                r.record_index, r.record_id, r.program, r.functional,
+                r.record_index, r.record_id, r.program, r.method,
                 r.basis, r.jobtype, r.total_energy, r.source_file,
                 m.chemical_formula, m.molecule_id
             {_RECORDS_JOIN}
@@ -78,7 +78,7 @@ TARGET_CONFIG = {
             ("File", "source_file", 22, "<"),
             ("Job", "jobtype", 6, "<"),
             ("Program", "program", 8, "<"),
-            ("Method", "functional", 12, "<"),
+            ("Method", "method", 12, "<"),
             ("Basis", "basis", 16, "<"),
             ("Formula", "chemical_formula", 20, "<"),
             ("Molecule ID", "molecule_id", 16, "<"),

@@ -97,11 +97,11 @@ class DatabaseInspector:
             ).fetchall()
             stats["jobtypes"] = [(r["jobtype"], r["cnt"]) for r in rows]
 
-            # Unique functionals and basis sets
+            # Unique methods and basis sets
             rows = conn.execute(
-                "SELECT functional, COUNT(*) AS cnt FROM records WHERE functional IS NOT NULL GROUP BY functional ORDER BY cnt DESC"
+                "SELECT method, COUNT(*) AS cnt FROM records WHERE method IS NOT NULL GROUP BY method ORDER BY cnt DESC"
             ).fetchall()
-            stats["functionals"] = [(r["functional"], r["cnt"]) for r in rows]
+            stats["methods"] = [(r["method"], r["cnt"]) for r in rows]
             rows = conn.execute(
                 "SELECT basis, COUNT(*) AS cnt FROM records WHERE basis IS NOT NULL GROUP BY basis ORDER BY cnt DESC"
             ).fetchall()
@@ -194,11 +194,11 @@ class DatabaseInspector:
         # Functionals & Basis sets
         lines.append("")
         lines.append(separator("Electronic Structure Methods"))
-        if stats["functionals"]:
-            functionals_str = ", ".join(
-                f"{f[0]} ({f[1]})" for f in stats["functionals"]
+        if stats["methods"]:
+            methods_str = ", ".join(
+                f"{f[0]} ({f[1]})" for f in stats["methods"]
             )
-            lines.append(format_kv("Methods", functionals_str))
+            lines.append(format_kv("Methods", methods_str))
         else:
             lines.append(format_kv("Methods", "NULL"))
         if stats["basis_sets"]:
@@ -276,7 +276,7 @@ class DatabaseInspector:
         lines.append(
             format_kv("Program Version", provenance.get("program_version"))
         )
-        lines.append(format_kv("Method", meta.get("functional")))
+        lines.append(format_kv("Method", meta.get("method")))
         lines.append(format_kv("Basis Set", meta.get("basis")))
         lines.append(format_kv("Spin Type", meta.get("spin")))
         lines.append(format_kv("Job Type", meta.get("jobtype")))
@@ -926,7 +926,7 @@ class DatabaseInspector:
             rid = str(r.get("record_id", ""))[:12]
             job = r.get("jobtype", "") or ""
             prog = r.get("program", "") or ""
-            func = r.get("functional", "") or ""
+            func = r.get("method", "") or ""
             basis = r.get("basis", "") or ""
             energy = r.get("total_energy")
             energy_str = format_energy(energy) if energy is not None else ""

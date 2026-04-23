@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Scalar keys supported for CSV export (from records + last molecule).
 CSV_OPTIONAL_COLUMNS = {
     "program",
-    "functional",
+    "method",
     "basis",
     "charge",
     "multiplicity",

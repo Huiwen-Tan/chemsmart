@@ -54,7 +54,7 @@ def is_custom_solvent(solvent_id):
     return solvent_id.strip().lower() in CUSTOM_SOLVENT_KEYWORDS
 
 
-def get_record_id(structure_id, program, functional, basis, jobtype):
+def get_record_id(structure_id, program, method, basis, jobtype):
     """Generate a stable record ID from molecular identity and calculation fields.
 
     The hash is computed from the molecule's ``structure_id`` (which already
@@ -69,7 +69,7 @@ def get_record_id(structure_id, program, functional, basis, jobtype):
         structure_id: SHA-256 hex digest of the canonical geometry, charge
             and multiplicity (from ``Molecule.structure_id``).
         program: Computational chemistry program name (e.g. "gaussian").
-        functional: DFT functional or method.
+        method: DFT functional or method.
         basis: Basis set.
         jobtype: Job type specification.
 
@@ -79,7 +79,7 @@ def get_record_id(structure_id, program, functional, basis, jobtype):
     components = [
         str(structure_id),
         str(program),
-        str(functional),
+        str(method),
         str(basis),
         str(jobtype),
     ]

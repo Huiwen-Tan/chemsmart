@@ -85,7 +85,7 @@ class BaseAssembler:
         record_id = get_record_id(
             structure_id=ref_mol.structure_id,
             program=provenance.get("program", "unknown"),
-            functional=meta.get("functional", ""),
+            method=meta.get("method", ""),
             basis=meta.get("basis", ""),
             jobtype=meta.get("jobtype", ""),
         )
@@ -105,7 +105,7 @@ class BaseAssembler:
         else:
             basis = standardize_basis_set(basis)
         meta_data = {
-            "functional": self.output.functional,
+            "method": self.output.functional,
             "basis": basis,
             "num_basis_functions": self.output.num_basis_functions,
             "spin": self.output.spin,

@@ -81,7 +81,7 @@ class Database:
                     record_id TEXT UNIQUE NOT NULL,
                     program TEXT,
                     -- Meta fields
-                    functional TEXT,
+                    method TEXT,
                     basis TEXT,
                     num_basis_functions INTEGER,
                     spin TEXT,
@@ -275,7 +275,7 @@ class Database:
             """
             INSERT OR REPLACE INTO records (
                 record_id, program,
-                functional, basis, num_basis_functions, spin, jobtype,
+                method, basis, num_basis_functions, spin, jobtype,
                 solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
                 temperature_in_K, pressure_in_atm,
                 total_energy, num_unpaired_electrons,
@@ -304,7 +304,7 @@ class Database:
                 record_dict.get("record_id"),
                 program,
                 # Meta
-                meta.get("functional"),
+                meta.get("method"),
                 meta.get("basis"),
                 meta.get("num_basis_functions"),
                 meta.get("spin"),
@@ -625,7 +625,7 @@ class Database:
     def _extract_meta(row):
         """Extract meta fields from record row."""
         meta = {
-            "functional": row.get("functional"),
+            "method": row.get("method"),
             "basis": row.get("basis"),
             "num_basis_functions": row.get("num_basis_functions"),
             "spin": row.get("spin"),
@@ -846,7 +846,7 @@ class Database:
         try:
             if record_index is not None:
                 cursor = conn.execute(
-                    """SELECT record_index, record_id, program, functional, basis, 
+                    """SELECT record_index, record_id, program, method, basis, 
                        jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
                        source_file
                        FROM records WHERE record_index = ?""",
@@ -854,7 +854,7 @@ class Database:
                 )
             elif record_id is not None:
                 cursor = conn.execute(
-                    """SELECT record_index, record_id, program, functional, basis,
+                    """SELECT record_index, record_id, program, method, basis,
                        jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
                        source_file
                        FROM records WHERE record_id = ?""",
@@ -892,7 +892,7 @@ class Database:
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.execute(
-                """SELECT record_index, record_id, program, functional, basis,
+                """SELECT record_index, record_id, program, method, basis,
                    jobtype, total_energy, homo_energy, lumo_energy, fmo_gap,
                    source_file
                    FROM records ORDER BY record_index"""
@@ -1129,7 +1129,7 @@ class Database:
             cursor = conn.execute(
                 """
                 SELECT DISTINCT r.record_index, r.record_id, r.program,
-                       r.functional, r.basis, r.jobtype, r.total_energy,
+                       r.method, r.basis, r.jobtype, r.total_energy,
                        r.source_file
                 FROM records r
                 JOIN record_structures rs ON r.record_id = rs.record_id
@@ -1155,7 +1155,7 @@ class Database:
             cursor = conn.execute(
                 """
                 SELECT DISTINCT r.record_index, r.record_id, r.program,
-                       r.functional, r.basis, r.jobtype, r.total_energy,
+                       r.method, r.basis, r.jobtype, r.total_energy,
                        r.source_file
                 FROM records r
                 JOIN record_structures rs ON r.record_id = rs.record_id
