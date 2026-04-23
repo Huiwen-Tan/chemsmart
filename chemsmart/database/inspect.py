@@ -639,7 +639,7 @@ class DatabaseInspector:
             lines.append(separator("Dipole Moment (Debye)"))
             lines.append(f"  {'X':>10}  {'Y':>10}  {'Z':>10}  {'Tot':>10}")
             lines.append(
-                f"  {'----------':>10}  {'----------':<10}  {'----------':>10}  {'----------':>10}"
+                f"  {'----------':>10}  {'----------':>10}  {'----------':>10}  {'----------':>10}"
             )
             x, y, z = dipole
             tot = dipole_mag if dipole_mag is not None else float("nan")
