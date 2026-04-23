@@ -71,8 +71,18 @@ class Molecule:
         Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
     mulliken_atomic_charges: dict[str, float] | None
         Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+    mulliken_spin_densities: dict[str, float] | None
+        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges), if available.
     is_optimized_structure: bool | None
         Whether this structure corresponds to an optimized step/final optimized geometry.
+    dipole_moment: numpy array | None
+        Dipole moment [X, Y, Z] components in Debye, if available.
+    dipole_moment_magnitude: float | None
+        Total dipole moment magnitude in Debye, if available.
+    rotational_constants: numpy array | None
+        Rotational constants [A, B, C] in Hz, if available.
+    point_group: str | None
+        Molecular point group string (e.g. "CS", "C2V"), if available.
     """
 
     def __init__(
@@ -97,7 +107,12 @@ class Molecule:
         structure_index_in_file=None,
         rotational_symmetry_number=None,
         mulliken_atomic_charges=None,
+        mulliken_spin_densities=None,
         is_optimized_structure=None,
+        dipole_moment=None,
+        dipole_moment_magnitude=None,
+        rotational_constants=None,
+        point_group=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -121,7 +136,13 @@ class Molecule:
         self.rotational_symmetry_number = rotational_symmetry_number
         self.is_optimized_structure = is_optimized_structure
         self.mulliken_atomic_charges = mulliken_atomic_charges
-        self.rotational_symmetry_number = rotational_symmetry_number
+        self.mulliken_spin_densities = mulliken_spin_densities
+        self.dipole_moment = dipole_moment  # np.array([x, y, z]) in Debye
+        self.dipole_moment_magnitude = (
+            dipole_moment_magnitude  # float in Debye
+        )
+        self.rotational_constants = rotational_constants
+        self.point_group = point_group
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond

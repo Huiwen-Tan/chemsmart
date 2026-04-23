@@ -8,7 +8,7 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.molecules.structure import CoordinateBlock, Molecule
-from chemsmart.utils.constants import joule_per_mol_to_hartree
+from chemsmart.utils.constants import au_to_debye, joule_per_mol_to_hartree
 from chemsmart.utils.io import (
     clean_duplicate_structure,
     create_molecule_list,
@@ -695,7 +695,13 @@ class ORCAOutput(ORCAFileMixin):
     def all_structures(self):
         """Obtain all structures in ORCA output file,
         including intermediate points if present.
-        Include corresponding energies and forces where available."""
+        Include corresponding energies and forces where available.
+
+        The final structure additionally carries these attributes when available:
+          - mulliken_atomic_charges
+          - dipole_moment and dipole_moment_magnitude
+          - point_group, rotational_symmetry_number, rotational_constants
+        """
 
         # Extract all raw structure data
         orientations = self._get_all_orientations()
@@ -790,6 +796,23 @@ class ORCAOutput(ORCAFileMixin):
         # Attach vibrational data to the final structure if available
         if self.vibrational_modes is not None:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
+        # Also attach Mulliken charges and rotational symmetry number, if available
+        if self.mulliken_atomic_charges is not None:
+            last_mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        # Attach dipole moment and rotational constants
+        if self.has_dipole_moment:
+            last_mol.dipole_moment = (
+                self.dipole_moment_in_debye
+            )  # [X,Y,Z] in Debye
+            last_mol.dipole_moment_magnitude = (
+                self.dipole_moment_magnitude_in_debye
+            )
+        if self.point_group is not None:
+            last_mol.point_group = self.point_group
+            last_mol.rotational_symmetry_number = (
+                self.rotational_symmetry_number
+            )
+            last_mol.rotational_constants = self.rotational_constants_in_Hz
 
         logger.debug(
             f"Total number of structures located: {len(all_structures)}"
@@ -2046,7 +2069,15 @@ class ORCAOutput(ORCAFileMixin):
         return all_dipole_moment_nuclear_contribution[-1]
 
     @property
-    def total_dipole_moment(self):
+    def has_dipole_moment(self):
+        """Check if the output file contains dipole moment calculations."""
+        for line in self.contents:
+            if "DIPOLE MOMENT" in line:
+                return True
+        return False
+
+    @property
+    def dipole_moment_in_au(self):
         all_dipole_moment = []
         for i, line_i in enumerate(self.contents):
             dipole_moment = np.zeros((3, 1))
@@ -2067,7 +2098,12 @@ class ORCAOutput(ORCAFileMixin):
         return all_dipole_moment[-1]
 
     @property
-    def dipole_moment_in_au(self):
+    def dipole_moment_in_debye(self):
+        """Total dipole moment [X, Y, Z] components in Debye."""
+        return self.dipole_moment_in_au * au_to_debye
+
+    @property
+    def dipole_moment_magnitude_in_au(self):
         all_dipole_moment = []
         for i, line_i in enumerate(self.contents):
             dipole_moment = 0.0
@@ -2082,7 +2118,7 @@ class ORCAOutput(ORCAFileMixin):
         return all_dipole_moment[-1]
 
     @property
-    def dipole_moment_in_debye(self):
+    def dipole_moment_magnitude_in_debye(self):
         all_dipole_moment = []
         for i, line_i in enumerate(self.contents):
             dipole_moment = 0.0
@@ -2155,6 +2191,25 @@ class ORCAOutput(ORCAFileMixin):
                             line_j_elements[-1].strip()
                         )
                         return rotational_symmetry_number
+        return None
+
+    @property
+    def point_group(self):
+        """Obtain the molecular point group from the ORCA output file."""
+        for i, line_i in enumerate(self.contents):
+            if line_i == "ENTHALPY":
+                for line_j in self.contents[i:]:
+                    if (
+                        "Point Group:" in line_j
+                        and "Symmetry Number:" in line_j
+                    ):
+                        # format: Point Group:  D(inf)h, Symmetry Number:   1
+                        pg = (
+                            line_j.split("Point Group:")[-1]
+                            .split(",")[0]
+                            .strip()
+                        )
+                        return pg.upper()
         return None
 
     @property
@@ -2501,10 +2556,6 @@ class ORCAOutput(ORCAFileMixin):
         )
         setattr(mol, "transition_dipoles", vib["transition_dipoles"])
         setattr(mol, "vibrational_modes", vib["modes"])
-
-        # Also attach Mulliken charges and rotational symmetry number, if available
-        mol.mulliken_atomic_charges = self.mulliken_atomic_charges
-        mol.rotational_symmetry_number = self.rotational_symmetry_number
 
         return mol
 

@@ -674,6 +674,21 @@ class TestGaussian16Output:
             45.103 * 1e-3 * kcal_per_mol_to_hartree,
             atol=1e-3,
         )
+        assert g16_output.has_dipole_moment
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([4.7915, -0.1097, 0.4554]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 4.8143, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants[-1],
+            np.array([1.6245e8, 7.3820e7, 5.3320e7]),
+            rtol=1e-4,
+        )
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
@@ -732,6 +747,22 @@ class TestGaussian16Output:
             g16_output.beta_fmo_gap,
             (-0.05025 - (-0.18923)) * units.Hartree,
             rtol=1e-6,
+        )
+        assert g16_output.has_dipole_moment
+        assert g16_output.num_dipole_moments == 3
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([-1.6500, -5.4954, -2.3627]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 6.2052, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants[-1],
+            np.array([6.2290e7, 5.5130e7, 4.6900e7]),
+            rtol=1e-4,
         )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):

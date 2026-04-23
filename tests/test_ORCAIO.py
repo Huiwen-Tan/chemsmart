@@ -810,13 +810,19 @@ class TestORCAOutput:
             np.array([0.0, 0.0, -0.99386]),
             rtol=1e-4,
         )
+        assert orca_out.has_dipole_moment
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([0.0, 0.0, -0.8092]),
             rtol=1e-4,
         )
-        assert orca_out.dipole_moment_in_au == 0.80920
-        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert np.allclose(
+            orca_out.dipole_moment_in_debye,
+            np.array([0.0, 0.0, -2.05678]),
+            rtol=1e-4,
+        )
+        assert orca_out.dipole_moment_magnitude_in_au == 0.80920
+        assert orca_out.dipole_moment_magnitude_in_debye == 2.05682
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([0.0, -0.809197, 0.0]),
@@ -827,6 +833,8 @@ class TestORCAOutput:
             np.array([0.0, -2.056815, 0.0]),
             rtol=1e-4,
         )
+        assert orca_out.rotational_symmetry_number == 2
+        assert orca_out.point_group == "C2V"
         assert orca_out.rotational_constants_in_wavenumbers == [
             26.416987,
             14.661432,
@@ -1030,12 +1038,12 @@ class TestORCAOutput:
             rtol=1e-4,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([0.0, 0.0, -0.8092]),
             rtol=1e-4,
         )
-        assert orca_out.dipole_moment_in_au == 0.80920
-        assert orca_out.dipole_moment_in_debye == 2.05682
+        assert orca_out.dipole_moment_magnitude_in_au == 0.80920
+        assert orca_out.dipole_moment_magnitude_in_debye == 2.05682
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([0.0, -0.809197, 0.0]),
@@ -1928,7 +1936,7 @@ class TestORCAOutput:
         )
         assert all(
             np.isclose(
-                orca_out.total_dipole_moment,
+                orca_out.dipole_moment_in_au,
                 np.array([-1.19793, -1.03921, -1.07725]),
                 rtol=1e-4,
             )
@@ -1940,8 +1948,8 @@ class TestORCAOutput:
                 rtol=1e-4,
             )
         )
-        assert orca_out.dipole_moment_in_au == 1.91715
-        assert orca_out.dipole_moment_in_debye == 4.87300
+        assert orca_out.dipole_moment_magnitude_in_au == 1.91715
+        assert orca_out.dipole_moment_magnitude_in_debye == 4.87300
         assert all(
             np.isclose(
                 orca_out.dipole_moment_along_axis_in_au,
@@ -2384,12 +2392,12 @@ class TestORCAOutput:
             rtol=1e-9,
         )
         assert np.allclose(
-            orca_out.total_dipole_moment,
+            orca_out.dipole_moment_in_au,
             np.array([-0.000000481, -0.004700712, 1.814008700]),
             rtol=1e-9,
         )
-        assert orca_out.dipole_moment_in_au == 1.814014790
-        assert orca_out.dipole_moment_in_debye == 4.610859166
+        assert orca_out.dipole_moment_magnitude_in_au == 1.814014790
+        assert orca_out.dipole_moment_magnitude_in_debye == 4.610859166
         assert np.allclose(
             orca_out.dipole_moment_along_axis_in_au,
             np.array([1.814011, -0.003782, 0.000001]),

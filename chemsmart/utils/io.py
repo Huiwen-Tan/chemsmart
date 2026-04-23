@@ -86,6 +86,8 @@ def create_molecule_list(
     pbc_conditions,
     num_structures=None,
     is_optimized_structure_list=None,
+    rotational_constants_list=None,
+    point_groups_list=None,
 ):
     """
     Helper to build a list of Molecule objects from arrays.
@@ -109,6 +111,10 @@ def create_molecule_list(
             uses `len(orientations)`.
         is_optimized_structure_list (list[bool] | None): Per-structure flags
             indicating if the structure is optimized (optional).
+        rotational_constants_list (list | None): Per-structure rotational
+            constants aligned with `orientations` (optional).
+        point_groups_list (list[str] | None): Per-structure point group
+            symbols aligned with `orientations` (optional).
 
     Returns:
         list[Molecule]: Molecule objects with specified properties.
@@ -149,6 +155,17 @@ def create_molecule_list(
             is_optimized_structure=(
                 is_optimized_structure_list[i]
                 if is_optimized_structure_list
+                else None
+            ),
+            rotational_constants=(
+                rotational_constants_list[i]
+                if rotational_constants_list
+                and i < len(rotational_constants_list)
+                else None
+            ),
+            point_group=(
+                point_groups_list[i]
+                if point_groups_list and i < len(point_groups_list)
                 else None
             ),
         )

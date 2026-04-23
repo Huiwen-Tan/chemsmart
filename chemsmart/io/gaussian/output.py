@@ -210,6 +210,20 @@ class Gaussian16Output(GaussianFileMixin):
         Use Standard orientations to get the
         structures; if not, use input orientations.
         Include their corresponding energy and forces if present.
+
+        Each structure additionally carries these attributes when available:
+          - point_group and rotational_constants — attached per step,
+            aligned 1:1 with structures.
+          - dipole_moment and dipole_moment_magnitude — attached to the
+            final structure only.
+          - mulliken_atomic_charges and mulliken_spin_densities — attached
+            to the final structure only.
+          - The following are attached to the final structure only, and only
+            when a frequency section is present:
+              vibrational_frequencies, vibrational_reduced_masses,
+              vibrational_force_constants, vibrational_ir_intensities,
+              vibrational_mode_symmetries, vibrational_modes,
+              rotational_symmetry_number.
         """
         return self._get_all_molecular_structures()
 
@@ -250,16 +264,22 @@ class Gaussian16Output(GaussianFileMixin):
 
         energies = list(self.energies) if self.energies else None
         forces = list(self.forces) if self.forces else None
+        rot_consts = list(self.all_rotational_constants) or None
+        point_groups = list(self.all_point_groups) or None
 
         # Helper to drop the first item across all arrays (when present)
         def drop_first():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             if orientations:
                 orientations = orientations[1:]
             if orientations_pbc:
                 orientations_pbc = orientations_pbc[1:]
             if energies:
                 energies = energies[1:]
+            if rot_consts:
+                rot_consts = rot_consts[1:]
+            if point_groups:
+                point_groups = point_groups[1:]
             # Forces do not need to be dropped here because no
             # force computation occurs at the first link job.
             # This is intentional: the forces array is
@@ -267,7 +287,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             orientations = orientations[-1:] if orientations else []
             orientations_pbc = (
                 orientations_pbc[-1:] if orientations_pbc else []
@@ -276,11 +296,15 @@ class Gaussian16Output(GaussianFileMixin):
                 energies = energies[-1:]
             if forces:
                 forces = forces[-1:]
+            if rot_consts:
+                rot_consts = rot_consts[-1:]
+            if point_groups:
+                point_groups = point_groups[-1:]
 
         # Right-trim auxiliaries to the number of
         # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
-            nonlocal orientations, orientations_pbc, energies, forces
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             n = len(orientations)
             if orientations_pbc and len(orientations_pbc) > n:
                 orientations_pbc = orientations_pbc[:n]
@@ -288,6 +312,10 @@ class Gaussian16Output(GaussianFileMixin):
                 energies = energies[:n]
             if forces and len(forces) > n:
                 forces = forces[:n]
+            if rot_consts and len(rot_consts) > n:
+                rot_consts = rot_consts[:n]
+            if point_groups and len(point_groups) > n:
+                point_groups = point_groups[:n]
 
         # 2) Handle link jobs
         if self.is_link:
@@ -372,6 +400,8 @@ class Gaussian16Output(GaussianFileMixin):
             frozen_atoms=frozen_atoms,
             pbc_conditions=self.list_of_pbc_conditions,
             is_optimized_structure_list=is_optimized,
+            rotational_constants_list=rot_consts,
+            point_groups_list=point_groups,
         )
 
         if self.normal_termination:
@@ -403,6 +433,16 @@ class Gaussian16Output(GaussianFileMixin):
         # Attach vibrational data to the final structure if available
         if self.num_vib_frequencies:
             all_structures[-1] = self._attach_vib_metadata(last_mol)
+        # Attach Mulliken charges/spin densities and dipole moments to the final structure
+        if self.mulliken_atomic_charges is not None:
+            last_mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        if self.mulliken_spin_densities is not None:
+            last_mol.mulliken_spin_densities = self.mulliken_spin_densities
+        if self.has_dipole_moment:
+            last_mol.dipole_moment = self.all_dipole_moments[-1]
+            last_mol.dipole_moment_magnitude = (
+                self.all_dipole_moment_magnitudes[-1]
+            )
 
         return all_structures
 
@@ -784,8 +824,7 @@ class Gaussian16Output(GaussianFileMixin):
         setattr(mol, "vibrational_mode_symmetries", vib["mode_symmetries"])
         setattr(mol, "vibrational_modes", vib["modes"])
 
-        # Attach Mulliken charges and rotational symmetry number like vibrations
-        mol.mulliken_atomic_charges = self.mulliken_atomic_charges
+        # Attach rotational symmetry number
         mol.rotational_symmetry_number = self.rotational_symmetry_number
 
         return mol
@@ -1273,6 +1312,61 @@ class Gaussian16Output(GaussianFileMixin):
     @cached_property
     def num_forces(self):
         return len(self.forces)
+
+    @cached_property
+    def has_dipole_moment(self):
+        """Check if the output file contains dipole moment calculations."""
+        for line in self.contents:
+            if "Dipole moment (field-independent basis, Debye):" in line:
+                return True
+        return False
+
+    @cached_property
+    def all_dipole_moments(self):
+        """Obtain all dipole moments from the output file as [X, Y, Z] arrays in Debye."""
+        list_of_all_dipole_moments, _ = (
+            self._get_dipole_moments_for_molecules()
+        )
+        return list_of_all_dipole_moments
+
+    @cached_property
+    def all_dipole_moment_magnitudes(self):
+        """Obtain all dipole moment magnitudes (total) from the output file in Debye."""
+        _, list_of_all_dipole_moment_magnitudes = (
+            self._get_dipole_moments_for_molecules()
+        )
+        return list_of_all_dipole_moment_magnitudes
+
+    def _get_dipole_moments_for_molecules(self):
+        """
+        Obtain a list of dipole moments for all molecular geometries.
+        Each dipole moment is stored as a np array of shape (3,) containing
+        [X, Y, Z] components in Debye units.
+        """
+        all_dipole_moments = []
+        all_dipole_moment_magnitudes = []
+        for i, line in enumerate(self.contents):
+            if "Dipole moment (field-independent basis, Debye):" in line:
+                next_line = self.contents[i + 1]
+                parts = next_line.split()
+                x_idx = parts.index("X=") + 1
+                y_idx = parts.index("Y=") + 1
+                z_idx = parts.index("Z=") + 1
+                tot_idx = parts.index("Tot=") + 1
+                x_val = float(parts[x_idx])
+                y_val = float(parts[y_idx])
+                z_val = float(parts[z_idx])
+                tot_val = float(parts[tot_idx])
+                dipole_moment = np.array([x_val, y_val, z_val])
+                all_dipole_moment_magnitudes.append(tot_val)
+                all_dipole_moments.append(dipole_moment)
+        if len(all_dipole_moments) == 0:
+            return [], []
+        return all_dipole_moments, all_dipole_moment_magnitudes
+
+    @cached_property
+    def num_dipole_moments(self):
+        return len(self.all_dipole_moments)
 
     @cached_property
     def input_orientations(self):
@@ -2021,6 +2115,34 @@ class Gaussian16Output(GaussianFileMixin):
                 for rot_const in line.split("(GHZ):")[-1].split():
                     rot_consts.append(float(rot_const) * 1e9)
                 return rot_consts
+
+    @cached_property
+    def all_rotational_constants(self):
+        """
+        List of rotational constants (np.array in Hz) for each geometry step,
+        in the order they appear in the file.
+        """
+        result = []
+        for line in self.contents:
+            if "Rotational constants (GHZ):" in line:
+                vals = line.split("(GHZ):")[-1].split()
+                result.append(np.array([float(v) * 1e9 for v in vals]))
+        return result
+
+    @cached_property
+    def all_point_groups(self):
+        """
+        List of point group strings for each geometry step,
+        in the order they appear in the file.
+        """
+        result = []
+        for line in self.contents:
+            if line.strip().startswith("Full point group"):
+                parts = line.split()
+                # format: Full point group  <PG>  NOp  <n>
+                pg_idx = parts.index("group") + 1
+                result.append(parts[pg_idx].upper())
+        return result
 
     def to_dataset(self, **kwargs):
         """

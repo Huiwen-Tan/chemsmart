@@ -38,6 +38,8 @@ joule_per_mol_to_hartree = 1 / (
 )  # J/mol to Hartree
 # joule_per_mol_to_hartree = 3.8087991196914175e-07
 
+au_to_debye = 2.54174623
+
 
 def energy_conversion(from_unit, to_unit, value=1.0):
     """
