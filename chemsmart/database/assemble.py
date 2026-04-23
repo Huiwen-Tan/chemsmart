@@ -172,9 +172,23 @@ class BaseAssembler:
             molecule_info["mulliken_atomic_charges"] = (
                 mol.mulliken_atomic_charges
             )
+        if mol.mulliken_spin_densities is not None:
+            molecule_info["mulliken_spin_densities"] = (
+                mol.mulliken_spin_densities
+            )
         if mol.rotational_symmetry_number is not None:
             molecule_info["rotational_symmetry_number"] = (
                 mol.rotational_symmetry_number
+            )
+        if mol.rotational_constants is not None:
+            molecule_info["rotational_constants"] = mol.rotational_constants
+        if mol.point_group is not None:
+            molecule_info["point_group"] = mol.point_group
+        if mol.dipole_moment is not None:
+            molecule_info["dipole_moment"] = mol.dipole_moment
+        if mol.dipole_moment_magnitude is not None:
+            molecule_info["dipole_moment_magnitude"] = (
+                mol.dipole_moment_magnitude
             )
         if mol.has_vibrations:
             molecule_info.update(

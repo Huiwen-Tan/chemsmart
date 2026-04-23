@@ -278,7 +278,7 @@ class DatabaseInspector:
         )
         lines.append(format_kv("Method", meta.get("functional")))
         lines.append(format_kv("Basis Set", meta.get("basis")))
-        lines.append(format_kv("Spin", meta.get("spin")))
+        lines.append(format_kv("Spin Type", meta.get("spin")))
         lines.append(format_kv("Job Type", meta.get("jobtype")))
         lines.append(format_kv("Solvent", bool_to_str(meta.get("solvent_on"))))
         if meta.get("solvent_on"):
@@ -543,8 +543,11 @@ class DatabaseInspector:
         lines.append(
             format_kv("Energy (Eh)", format_energy(struct.get("energy")))
         )
+        is_opt = struct.get("is_optimized_structure")
+        if is_opt is not None:
+            lines.append(format_kv("Optimized", bool_to_str(is_opt)))
 
-        # Basic info
+        # Structure identity fields
         lines.append("")
         lines.append(separator("Structure Detail"))
         lines.append(format_kv("Structure ID", struct.get("structure_id")))
@@ -591,38 +594,85 @@ class DatabaseInspector:
             lines.append(separator("Frozen Atoms"))
             lines.append(f"  {frozen}")
 
-        # Center of mass / moments of inertia
+        # Physical properties
         com = struct.get("center_of_mass")
-        if com is not None:
+        moi = struct.get("moments_of_inertia")
+        rot_sym = struct.get("rotational_symmetry_number")
+        rot_consts = struct.get("rotational_constants")
+        point_group = struct.get("point_group")
+        if any(
+            v is not None for v in (com, moi, rot_sym, rot_consts, point_group)
+        ):
             lines.append("")
             lines.append(separator("Physical Properties"))
-            lines.append(
-                format_kv(
-                    "Center of Mass (Å)",
-                    f"[{', '.join(format_float(c, 6) for c in com)}]",
+            if point_group is not None:
+                lines.append(format_kv("Point Group", point_group))
+            if rot_sym is not None:
+                lines.append(format_kv("Rotational Symmetry Number", rot_sym))
+            if com is not None:
+                lines.append(
+                    format_kv(
+                        "Center of Mass (Å)",
+                        f"[{', '.join(format_float(c, 6) for c in com)}]",
+                    )
                 )
-            )
-        moi = struct.get("moments_of_inertia")
-        if moi is not None:
-            lines.append(
-                format_kv(
-                    "Moments of Inertia (amu·Å²)",
-                    f"[{', '.join(format_float(v, 6) for v in moi)}]",
+            if moi is not None:
+                lines.append(
+                    format_kv(
+                        "Moments of Inertia (amu·Å²)",
+                        f"[{', '.join(format_float(v, 6) for v in moi)}]",
+                    )
                 )
-            )
-        rot_sym = struct.get("rotational_symmetry_number")
-        if rot_sym is not None:
-            lines.append(format_kv("Rotational Symmetry Number", rot_sym))
+            if rot_consts is not None:
+                lines.append(
+                    format_kv(
+                        "Rotational Constants (Hz)",
+                        f"[{', '.join(f'{v:.4e}' for v in rot_consts)}]",
+                    )
+                )
 
-        # Mulliken charges
-        mulliken = struct.get("mulliken_atomic_charges")
-        if mulliken is not None:
+        # Dipole moment
+        dipole = struct.get("dipole_moment")
+        dipole_mag = struct.get("dipole_moment_magnitude")
+        if dipole is not None:
             lines.append("")
-            lines.append(separator("Mulliken Atomic Charges"))
-            lines.append(f"  {'Idx':>4}  {'Elem':<4}  {'Charge':>12}")
-            lines.append(f"  {'----':>4}  {'----':<4}  {'----------':>12}")
-            for i, (atom, q) in enumerate(mulliken.items(), 1):
-                lines.append(f"  {i:>4}  {atom:<6}  {q:>10.6f}")
+            lines.append(separator("Dipole Moment (Debye)"))
+            lines.append(f"  {'X':>10}  {'Y':>10}  {'Z':>10}  {'Tot':>10}")
+            lines.append(
+                f"  {'----------':>10}  {'----------':<10}  {'----------':>10}  {'----------':>10}"
+            )
+            x, y, z = dipole
+            tot = dipole_mag if dipole_mag is not None else float("nan")
+            lines.append(f"  {x:>10.6f}  {y:>10.6f}  {z:>10.6f}  {tot:>10.6f}")
+
+        # Mulliken population analysis
+        mulliken = struct.get("mulliken_atomic_charges")
+        spin_densities = struct.get("mulliken_spin_densities")
+        if mulliken is not None or spin_densities is not None:
+            lines.append("")
+            lines.append(separator("Mulliken Population Analysis"))
+            if mulliken is not None and spin_densities is not None:
+                lines.append(
+                    f"  {'Idx':>4}  {'Elem':<4}  {'Charge':>10}  {'Spin':>10}"
+                )
+                lines.append(
+                    f"  {'----':>4}  {'----':<4}  {'----------':>10}  {'----------':>10}"
+                )
+                for i, (atom, q) in enumerate(mulliken.items(), 1):
+                    s = spin_densities.get(atom, float("nan"))
+                    lines.append(
+                        f"  {i:>4}  {atom:<4}  {q:>10.6f}  {s:>10.6f}"
+                    )
+            elif mulliken is not None:
+                lines.append(f"  {'Idx':>4}  {'Elem':<4}  {'Charge':>10}")
+                lines.append(f"  {'----':>4}  {'----':<4}  {'----------':>10}")
+                for i, (atom, q) in enumerate(mulliken.items(), 1):
+                    lines.append(f"  {i:>4}  {atom:<4}  {q:>10.6f}")
+            else:
+                lines.append(f"  {'Idx':>4}  {'Elem':<4}  {'Spin':>10}")
+                lines.append(f"  {'----':>4}  {'----':<4}  {'----------':>10}")
+                for i, (atom, s) in enumerate(spin_densities.items(), 1):
+                    lines.append(f"  {i:>4}  {atom:<4}  {s:>10.6f}")
 
         # Vibrational data
         num_vib = struct.get("num_vibrational_modes")

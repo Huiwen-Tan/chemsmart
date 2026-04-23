@@ -194,7 +194,12 @@ class Database:
                     forces_json TEXT,
                     frozen_atoms_json TEXT,
                     mulliken_atomic_charges_json TEXT,
+                    mulliken_spin_densities_json TEXT,
                     rotational_symmetry_number INTEGER,
+                    rotational_constants_json TEXT,
+                    point_group TEXT,
+                    dipole_moment_json TEXT,
+                    dipole_moment_magnitude REAL,
                     num_vibrational_modes INTEGER,
                     vibrational_frequencies_json TEXT,
                     vibrational_modes_json TEXT,
@@ -442,10 +447,12 @@ class Database:
                     record_id, structure_id, index_in_record,
                     structure_index_in_file, is_optimized_structure,
                     energy, forces_json, frozen_atoms_json,
-                    mulliken_atomic_charges_json, rotational_symmetry_number,
+                    mulliken_atomic_charges_json, mulliken_spin_densities_json,
+                    rotational_symmetry_number, rotational_constants_json,
+                    point_group, dipole_moment_json, dipole_moment_magnitude,
                     num_vibrational_modes, vibrational_frequencies_json,
                     vibrational_modes_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -457,7 +464,12 @@ class Database:
                     to_json(mol.get("forces")),
                     to_json(mol.get("frozen_atoms")),
                     to_json(mol.get("mulliken_atomic_charges")),
+                    to_json(mol.get("mulliken_spin_densities")),
                     mol.get("rotational_symmetry_number"),
+                    to_json(mol.get("rotational_constants")),
+                    mol.get("point_group"),
+                    to_json(mol.get("dipole_moment")),
+                    mol.get("dipole_moment_magnitude"),
                     mol.get("num_vibrational_modes"),
                     to_json(mol.get("vibrational_frequencies")),
                     to_json(mol.get("vibrational_modes")),
@@ -759,9 +771,24 @@ class Database:
         mulliken = from_json(row.get("mulliken_atomic_charges_json"))
         if mulliken is not None:
             mol["mulliken_atomic_charges"] = mulliken
+        spin_densities = from_json(row.get("mulliken_spin_densities_json"))
+        if spin_densities is not None:
+            mol["mulliken_spin_densities"] = spin_densities
         rot_sym = row.get("rotational_symmetry_number")
         if rot_sym is not None:
             mol["rotational_symmetry_number"] = rot_sym
+        rot_consts = from_json(row.get("rotational_constants_json"))
+        if rot_consts is not None:
+            mol["rotational_constants"] = rot_consts
+        pg = row.get("point_group")
+        if pg is not None:
+            mol["point_group"] = pg
+        dipole = from_json(row.get("dipole_moment_json"))
+        if dipole is not None:
+            mol["dipole_moment"] = dipole
+        dipole_mag = row.get("dipole_moment_magnitude")
+        if dipole_mag is not None:
+            mol["dipole_moment_magnitude"] = dipole_mag
         if row.get("num_vibrational_modes") is not None:
             mol["num_vibrational_modes"] = row.get("num_vibrational_modes")
             mol["vibrational_frequencies"] = from_json(

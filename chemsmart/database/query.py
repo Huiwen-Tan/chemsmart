@@ -334,11 +334,7 @@ class DatabaseQuery:
         entity = self._config["entity_name"]
         db_name = os.path.basename(self.db_file)
 
-        title = (
-            "Query Summary"
-            if self.target == "records"
-            else f"Query Summary ({self.target})"
-        )
+        title = f"Query Summary ({self.target})"
         header_lines = [
             separator(title),
             f"DB      : {db_name}",
