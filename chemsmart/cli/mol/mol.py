@@ -5,14 +5,13 @@ import os
 import click
 
 from chemsmart.cli.job import (
-    build_database_kwargs,
-    click_database_record_options,
+    click_database_entry_options,
     click_file_label_and_index_options,
     click_filenames_options,
     click_molecule_folder_options,
     click_pubchem_options,
-    validate_database_options,
 )
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label, select_items_by_index
@@ -330,7 +329,16 @@ def click_pymol_save_options(f):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
-@click_database_record_options
+@click_database_entry_options
+@click.option(
+    "--mid",
+    "--molecule-id",
+    "molecule_id",
+    type=str,
+    default=None,
+    help="Molecule ID (or unique prefix) inside a chemsmart database. "
+    "Loads all conformers for that molecule.",
+)
 @click_molecule_folder_options
 @click_pubchem_options
 @click.pass_context
@@ -342,6 +350,8 @@ def mol(
     index,
     record_index,
     record_id,
+    structure_id,
+    molecule_id,
     directory,
     filetype,
     pubchem,
@@ -359,15 +369,42 @@ def mol(
     # mark this pipeline as not QMMM by default
     ctx.obj.setdefault("qmmm", False)
     molecules = None
-    is_database_file = False
 
     # Normalize empty tuple to None (click's
     # multiple=True returns () when no -f provided)
     if not filenames:
         filenames = None
+    single_filename = None
+    if filenames is not None and len(filenames) == 1:
+        single_filename = filenames[0]
 
-    # validate database record options
-    validate_database_options(record_index, record_id)
+    is_database_file = (
+        single_filename is not None
+        and single_filename.endswith(".db")
+        and is_chemsmart_database(single_filename)
+    )
+    if is_database_file:
+        record_selectors = [
+            record_index is not None,
+            record_id is not None,
+        ]
+        selector_count = (
+            (record_index is not None)
+            + (record_id is not None)
+            + (structure_id is not None)
+            + (molecule_id is not None)
+        )
+        if selector_count != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, "
+                "--sid/--structure-id, or --mid/--molecule-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index can only be used "
+                "together with --ri/--record-index or --rid/--record-id."
+            )
 
     # obtain molecule structure
     if directory is not None and filetype is not None:
@@ -410,18 +447,29 @@ def mol(
             ctx.obj["qmmm"] = False
             return
         else:
-            if len(filenames) == 1:
-                filenames = filenames[0]
-                is_database_file = filenames.endswith(".db")
+            if single_filename:
+                filenames = single_filename
                 if is_database_file:
-                    db_kwargs = build_database_kwargs(record_index, record_id)
-                    file_index = index if index is not None else "-1"
-                    molecules = Molecule.from_filepath(
-                        filepath=filenames,
-                        index=file_index,
-                        return_list=True,
-                        **db_kwargs,
-                    )
+                    if molecule_id is not None:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            return_list=True,
+                            molecule_id=molecule_id,
+                        )
+                    elif structure_id is not None:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            return_list=True,
+                            structure_id=structure_id,
+                        )
+                    else:
+                        molecules = Molecule.from_filepath(
+                            filepath=filenames,
+                            index=index or "-1",
+                            return_list=True,
+                            record_index=record_index,
+                            record_id=record_id,
+                        )
                 else:
                     molecules = Molecule.from_filepath(
                         filepath=filenames, index=":", return_list=True
@@ -450,9 +498,27 @@ def mol(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filenames))[0]
+        if is_database_file:
+            if structure_id is not None:
+                label = f"{label}_SID{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI{record_index}"
+            elif molecule_id is not None:
+                label = f"{label}_MID{molecule_id}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filenames))[0]
+        if is_database_file:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id[:12]}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id[:12]}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
+            elif molecule_id is not None:
+                label = f"{label}_MID-{molecule_id[:16]}"
 
     label = clean_label(label)
 
@@ -499,7 +565,6 @@ def mol_process_pipeline(ctx, *args, **kwargs):
 @click.group(cls=MyGroup)
 @click_filenames_options
 @click_file_label_and_index_options
-@click_database_record_options
 @click_molecule_folder_options
 @click_pubchem_options
 @click.pass_context
@@ -509,8 +574,6 @@ def mol_qmmm(
     label,
     append_label,
     index,
-    record_index,
-    record_id,
     directory,
     filetype,
     pubchem,
@@ -525,10 +588,6 @@ def mol_qmmm(
     ctx.ensure_object(dict)
     ctx.obj["qmmm"] = True
     molecules = None
-    is_database_file = False
-
-    # validate database record options
-    validate_database_options(record_index, record_id)
 
     # obtain molecule structure
     if directory is not None and filetype is not None:
@@ -555,20 +614,9 @@ def mol_qmmm(
     if filenames:
         if len(filenames) == 1:
             filenames = filenames[0]
-            is_database_file = filenames.endswith(".db")
-            if is_database_file:
-                db_kwargs = build_database_kwargs(record_index, record_id)
-                file_index = index if index is not None else "-1"
-                molecules = QMMMMolecule.from_filepath(
-                    filepath=filenames,
-                    index=file_index,
-                    return_list=True,
-                    **db_kwargs,
-                )
-            else:
-                molecules = QMMMMolecule.from_filepath(
-                    filepath=filenames, index=":", return_list=True
-                )
+            molecules = QMMMMolecule.from_filepath(
+                filepath=filenames, index=":", return_list=True
+            )
             assert (
                 molecules is not None
             ), f"Could not obtain molecule from {filenames}!"
@@ -604,7 +652,7 @@ def mol_qmmm(
 
     logger.debug(f"Obtained molecules: {molecules} before applying indices")
 
-    if index is not None and not is_database_file:
+    if index is not None:
         logger.debug(f"Using molecule with index: {index}")
         molecules = select_items_by_index(
             molecules,
@@ -612,7 +660,7 @@ def mol_qmmm(
             allow_duplicates=False,
             allow_out_of_range=False,
         )
-    elif not is_database_file:
+    else:
         molecules = [molecules[-1]]  # Default: last molecule as list
 
     logger.debug(f"Obtained molecules: {molecules}")

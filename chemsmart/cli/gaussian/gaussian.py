@@ -5,13 +5,12 @@ import os
 import click
 
 from chemsmart.cli.job import (
-    build_database_kwargs,
-    click_database_record_options,
+    click_database_entry_options,
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
-    validate_database_options,
 )
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
@@ -539,7 +538,7 @@ def click_gaussian_qmmm_options(f):
 @click_gaussian_options
 @click_filename_options
 @click_file_label_and_index_options
-@click_database_record_options
+@click_database_entry_options
 @click_gaussian_settings_options
 @click_gaussian_solvent_group_options
 @click_pubchem_options
@@ -559,6 +558,7 @@ def gaussian(
     index,
     record_index,
     record_id,
+    structure_id,
     additional_opt_options,
     additional_route_parameters,
     append_additional_info,
@@ -573,6 +573,24 @@ def gaussian(
 ):
     """CLI subcommand for running Gaussian
     jobs using the chemsmart framework."""
+    is_database_file = (
+        filename is not None
+        and filename.endswith(".db")
+        and is_chemsmart_database(filename)
+    )
+    if is_database_file:
+        record_selectors = [record_index is not None, record_id is not None]
+        if sum(record_selectors) + (structure_id is not None) != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, or "
+                "--sid/--structure-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index can only be used "
+                "together with --ri/--record-index or --rid/--record-id."
+            )
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -596,9 +614,19 @@ def gaussian(
         #  and do not use any defaults!
         job_settings = GaussianJobSettings.from_filepath(filename)
     elif filename.endswith(".db"):
-        job_settings = GaussianJobSettings.from_database(
-            filename, record_index=record_index, record_id=record_id
-        )
+        if is_chemsmart_database(filename):
+            job_settings = GaussianJobSettings.from_database(
+                filepath=filename,
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=index or "-1",
+                structure_id=structure_id,
+            )
+        else:
+            logger.debug(
+                f"File {filename} is not a valid chemsmart database file."
+            )
+            job_settings = GaussianJobSettings.default()
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro")):
     else:
@@ -647,6 +675,24 @@ def gaussian(
     if forces:
         job_settings.forces = forces
         keywords += ("forces",)
+    if is_database_file:
+        if record_index is not None or record_id is not None:
+            database_keywords = []
+            if job_settings.functional is not None:
+                database_keywords.append("functional")
+            if job_settings.basis is not None:
+                database_keywords.append("basis")
+            if job_settings.solvent_model is not None:
+                database_keywords.append("solvent_model")
+            if job_settings.solvent_id is not None:
+                database_keywords.append("solvent_id")
+            if job_settings.custom_solvent is not None:
+                database_keywords.append("custom_solvent")
+            keywords += tuple(
+                keyword
+                for keyword in database_keywords
+                if keyword not in keywords
+            )
 
     # Handle solvent options specified at the gaussian group level.
     # These are propagated to every subcommand via the merge mechanism,
@@ -669,9 +715,7 @@ def gaussian(
             keywords += ("additional_solvent_options",)
 
     # obtain molecule structure
-    validate_database_options(record_index, record_id)
     molecules = None
-    is_database_file = False
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\n"
@@ -684,26 +728,38 @@ def gaussian(
         )
 
     if filename:
-        is_database_file = filename.endswith(".db")
         if is_database_file:
-            db_kwargs = build_database_kwargs(record_index, record_id)
-            file_index = index if index is not None else "-1"
-            molecules = Molecule.from_filepath(
-                filepath=filename,
-                index=file_index,
-                return_list=True,
-                **db_kwargs,
+            if structure_id is not None:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    return_list=True,
+                    structure_id=structure_id,
+                )
+            else:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    index=index or "-1",
+                    return_list=True,
+                    record_index=record_index,
+                    record_id=record_id,
+                )
+
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from database {filename}!"
+            logger.debug(
+                f"Obtained database molecule {molecules} from {filename}"
             )
         else:
             molecules = Molecule.from_filepath(
                 filepath=filename, index=":", return_list=True
             )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(
-            f"Obtained {len(molecules)} molecule {molecules} from {filename}"
-        )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(
+                f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+            )
 
     if pubchem:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
@@ -720,9 +776,23 @@ def gaussian(
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if is_database_file:
+            if structure_id is not None:
+                label = f"{label}_SID{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI{record_index}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if is_database_file:
+            if structure_id is not None:
+                label = f"{label}_SID{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI{record_index}"
         label = f"{label}_{ctx.invoked_subcommand}"
 
     label = clean_label(label)

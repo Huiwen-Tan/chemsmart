@@ -1088,9 +1088,9 @@ class Molecule:
             from chemsmart.database.utils import is_chemsmart_database
 
             if is_chemsmart_database(filepath):
-                return cls._read_database_file(
+                return cls._read_chemsmart_dbfile(
                     filepath=filepath,
-                    index=index,
+                    structure_index=index,
                     return_list=return_list,
                     **kwargs,
                 )
@@ -1218,24 +1218,30 @@ class Molecule:
         )
 
     @classmethod
-    def _read_database_file(
+    def _read_chemsmart_dbfile(
         cls,
         filepath,
-        index="-1",
         return_list=False,
         record_index=None,
         record_id=None,
+        structure_index="-1",
+        structure_id=None,
+        molecule_id=None,
     ):
         """Read molecules from a chemsmart database file (.db).
 
         Args:
-            filepath (str): Path to the .db file.
-            index (str or int): Structure index within the selected record(s).
-                Uses 1-based indexing. ``"-1"`` for the last structure,
-                ``":"`` for all structures.
+            filepath (str): Path to the chemsmart .db file.
             return_list (bool): If True, always return a list.
-            record_index (int or None): 1-based record index to select.
-            record_id (str or None): Record ID (or prefix) to select.
+            record_index (int, optional): 1-based record index to select.
+            record_id (str, optional): Full record ID or unique prefix.
+            structure_index (str or int): 1-based index or slice string
+                applied within the resolved record(s). Only used together
+                with record_index or record_id.
+            structure_id (str, optional): Full structure ID or unique
+                prefix; returns the corresponding single structure.
+            molecule_id (str, optional): Full molecule ID or unique
+                prefix; returns every conformer of that molecule.
 
         Returns:
             Molecule or list[Molecule]: Molecule object(s) from the database.
@@ -1243,12 +1249,24 @@ class Molecule:
         from chemsmart.io.database import DatabaseFile
 
         database_file = DatabaseFile(filename=filepath)
-        return database_file.get_molecules(
-            index=index,
-            return_list=return_list,
-            record_index=record_index,
-            record_id=record_id,
-        )
+        if structure_id is not None:
+            return database_file.get_molecule_by_structure_id(
+                structure_id=structure_id,
+                return_list=return_list,
+            )
+        if molecule_id is not None:
+            return database_file.get_molecules_by_molecule_id(
+                molecule_id=molecule_id,
+                return_list=return_list,
+            )
+        if record_index is not None or record_id is not None:
+            return database_file.get_molecules_by_record(
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=structure_index,
+                return_list=return_list,
+            )
+        return database_file.get_all_molecules(return_list=return_list)
 
     # @staticmethod
     # @file_cache()

@@ -379,74 +379,91 @@ class ORCAJobSettings(MolecularJobSettings):
         return ORCAJobSettings.default()
 
     @classmethod
-    def from_database(cls, filepath, record_index=None, record_id=None):
-        """Create ORCA settings from a chemsmart database file (.db).
+    def from_database(
+        cls,
+        filepath,
+        record_index=None,
+        record_id=None,
+        structure_index="-1",
+        structure_id=None,
+    ):
+        """Create ORCA settings from a chemsmart database file.
 
-        Reads the specified record and extracts charge,
-        multiplicity, functional, basis, and solvent so that the returned
-        settings object mirrors what ``from_outfile`` would produce for
-        the equivalent ``.out`` file.
-
-        Args:
-            filepath (str): Path to the ``.db`` file.
-            record_index (int, optional): 1-based record index.
-            record_id (str, optional): Record ID (or unique prefix).
-
-        Returns:
-            ORCAJobSettings: Settings populated from the database record.
+        Record-context mode (record_index/record_id) inherits record
+        metadata. Geometry-only mode (structure_id) uses defaults and only
+        fills charge/multiplicity from the selected structure.
         """
         from chemsmart.database.database import Database
         from chemsmart.database.utils import resolve_record
+        from chemsmart.utils.utils import string2index_1based
 
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"Database file not found: {filepath}")
 
         db = Database(filepath)
-
-        # Resolve the target record
-        try:
-            record = resolve_record(
-                db,
-                record_index=record_index,
-                record_id=record_id,
-                return_list=False,
+        record_selected = record_index is not None or record_id is not None
+        if structure_id is not None and record_selected:
+            raise ValueError(
+                "Use either structure_id for geometry-only mode or "
+                "record_index/record_id for record-context mode, not both."
             )
-        except ValueError as e:
-            logger.warning(str(e))
+
+        settings = cls.default()
+
+        if structure_id is not None:
+            full_sid = db.get_structure_by_partial_id(structure_id)
+            structure = db.get_structure(full_sid)
+            if structure is None:
+                raise ValueError(
+                    f"No structure found with ID '{structure_id}'."
+                )
+            settings.charge = structure.get("charge")
+            settings.multiplicity = structure.get("multiplicity")
+            settings.title = (
+                "Geometry-only job prepared from chemsmart database "
+                f"{os.path.basename(filepath)}"
+            )
+            logger.info(
+                "Created geometry-only ORCAJobSettings from database: "
+                f"charge={settings.charge}, "
+                f"multiplicity={settings.multiplicity}"
+            )
+            return settings
+
+        record = resolve_record(
+            db,
+            record_index=record_index,
+            record_id=record_id,
+            return_list=False,
+        )
+        if record is None:
             return None
 
         meta = record.get("meta", {})
         molecules = record.get("molecules", [])
+        selected_index = string2index_1based(str(structure_index))
+        if isinstance(selected_index, slice):
+            raise ValueError(
+                "Database-aware ORCA jobs support one structure at a time."
+            )
 
-        # Extract charge/multiplicity from the last molecule
-        charge = None
-        multiplicity = None
-        if molecules:
-            last_mol = molecules[-1]
-            charge = last_mol.get("charge")
-            multiplicity = last_mol.get("multiplicity")
-
-        settings = cls.default()
-        settings.charge = charge
-        settings.multiplicity = multiplicity
-
-        if meta.get("functional") is not None:
-            settings.functional = meta["functional"]
-        if meta.get("basis") is not None:
-            settings.basis = meta["basis"]
-        if meta.get("jobtype") is not None:
-            settings.jobtype = meta["jobtype"]
-        if meta.get("solvent_model") is not None:
-            settings.solvent_model = meta["solvent_model"]
-        if meta.get("solvent_id") is not None:
-            settings.solvent_id = meta["solvent_id"]
-        if meta.get("custom_solvent") is not None:
-            settings.custom_solvent = meta["custom_solvent"]
-
-        settings.title = f"Job prepared from chemsmart database {os.path.basename(filepath)}"
+        structure = molecules[selected_index] if molecules else {}
+        settings.charge = structure.get("charge")
+        settings.multiplicity = structure.get("multiplicity")
+        settings.functional = meta.get("method")
+        settings.basis = meta.get("basis")
+        settings.jobtype = meta.get("jobtype")
+        settings.solvent_model = meta.get("solvent_model")
+        settings.solvent_id = meta.get("solvent_id")
+        settings.custom_solvent = meta.get("custom_solvent")
+        settings.title = (
+            "Job prepared from chemsmart database "
+            f"{os.path.basename(filepath)}"
+        )
         logger.info(
-            f"Created ORCAJobSettings from database: "
-            f"charge={charge}, multiplicity={multiplicity}, "
+            "Created ORCAJobSettings from database: "
+            f"charge={settings.charge}, "
+            f"multiplicity={settings.multiplicity}, "
             f"functional={settings.functional}, basis={settings.basis}"
         )
         return settings
