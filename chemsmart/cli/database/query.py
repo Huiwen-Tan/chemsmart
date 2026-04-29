@@ -102,6 +102,13 @@ def query(ctx, file, target, query, limit):
     if not os.path.isfile(file):
         raise FileNotFoundError(f"Database file not found: {file}")
 
+    from chemsmart.database.utils import is_chemsmart_database
+
+    if not is_chemsmart_database(file):
+        raise click.UsageError(
+            f"File {file} is not a valid chemsmart database file."
+        )
+
     if limit is not None:
         if limit <= 0:
             raise click.BadParameter("Limit must be a positive integer.")

@@ -1094,6 +1094,21 @@ class Molecule:
                     return_list=return_list,
                     **kwargs,
                 )
+            # Non-chemsmart .db: try ASE database reader, raise a friendly
+            # error if the file is also not a valid ASE database.
+            try:
+                result = cls._read_other(filepath, index, **kwargs)
+            except Exception as exc:
+                raise ValueError(
+                    f"File {filepath} is neither a valid chemsmart database "
+                    "nor an ASE database file."
+                ) from exc
+            if isinstance(result, list) and len(result) == 0:
+                raise ValueError(
+                    f"File {filepath} is neither a valid chemsmart database "
+                    "nor an ASE database file."
+                )
+            return result
 
         return cls._read_other(filepath, index, **kwargs)
 

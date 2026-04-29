@@ -105,6 +105,13 @@ def export(ctx, file, record_index, record_id, structure_index, keys, output):
     if not os.path.isfile(file):
         raise click.UsageError(f"Database file not found: {file}")
 
+    from chemsmart.database.utils import is_chemsmart_database
+
+    if not is_chemsmart_database(file):
+        raise click.UsageError(
+            f"File {file} is not a valid chemsmart database file."
+        )
+
     # Mutual exclusivity: --ri and --rid
     if record_index is not None and record_id is not None:
         raise click.UsageError(
