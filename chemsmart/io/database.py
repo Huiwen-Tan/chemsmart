@@ -100,25 +100,26 @@ class DatabaseFile(FileMixin):
             return_list=True,
         )
         molecules = []
-        structure_index = string2index_1based(structure_index)
+        selected_index = string2index_1based(str(structure_index))
         for record in records:
             mol_dicts = record.get("molecules", [])
             if not mol_dicts:
                 continue
-            if isinstance(structure_index, int):
+            if isinstance(selected_index, int):
                 try:
                     molecule = self.build_molecule_from_database(
-                        mol_dicts[structure_index]
+                        mol_dicts[selected_index]
                     )
                     molecules.append(molecule)
-                except IndexError:
+                except IndexError as exc:
                     raise ValueError(
-                        f"Structure index '{structure_index}' out of range for record {record.get('record_index')}"
-                    )
-            elif isinstance(structure_index, slice):
+                        f"Structure index {structure_index} out of "
+                        "range for selected record."
+                    ) from exc
+            elif isinstance(selected_index, slice):
                 molecule = [
                     self.build_molecule_from_database(mol_dict)
-                    for mol_dict in mol_dicts[structure_index]
+                    for mol_dict in mol_dicts[selected_index]
                 ]
                 molecules.extend(molecule)
         if return_list:

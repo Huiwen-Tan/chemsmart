@@ -447,8 +447,13 @@ class ORCAJobSettings(MolecularJobSettings):
             raise ValueError(
                 "Database-aware ORCA jobs support one structure at a time."
             )
-
-        structure = molecules[selected_index] if molecules else {}
+        try:
+            structure = molecules[selected_index] if molecules else {}
+        except IndexError as exc:
+            raise ValueError(
+                f"Structure index {structure_index} out of range for "
+                "selected record."
+            ) from exc
         settings.charge = structure.get("charge")
         settings.multiplicity = structure.get("multiplicity")
         settings.functional = meta.get("method")
