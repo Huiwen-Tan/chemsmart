@@ -200,9 +200,10 @@ def click_filename_options(f):
 
 
 def click_database_entry_options(f):
-    """CLI options for selecting an entry from a chemsmart database file.
-    Adds --ri/--rid (record entry) and --sid (structure entry). Only relevant
-    when the input file (-f) is a chemsmart database (.db).
+    """CLI options for selecting records or structures from a chemsmart database.
+    Adds --ri/--rid for record selection and --sid for global structure
+    selection. Only relevant when the input file (-f) is a chemsmart
+    database (.db).
     """
 
     @click.option(
@@ -230,7 +231,7 @@ def click_database_entry_options(f):
         type=str,
         default=None,
         help="Global structure ID (or unique prefix) inside a chemsmart "
-        "database. Geometry-only entry: does not inherit record context.",
+        "database. Only used when -f points to a chemsmart .db file.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -267,8 +268,8 @@ def click_file_label_and_index_options(f):
         help="Index of molecules to use; 1-based indices. "
         "If not specified, all molecules are passed to the job. "
         "Jobs that need only one molecule will use the last one. "
-        "For database files (.db), this selects the structure index "
-        "within each record.",
+        "For chemsmart database files (.db), use together with --ri/--rid "
+        "to select a structure index within the selected record.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

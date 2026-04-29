@@ -389,9 +389,11 @@ class ORCAJobSettings(MolecularJobSettings):
     ):
         """Create ORCA settings from a chemsmart database file.
 
-        Record-context mode (record_index/record_id) inherits record
-        metadata. Geometry-only mode (structure_id) uses defaults and only
-        fills charge/multiplicity from the selected structure.
+        With record selectors (record_index/record_id), this reconstructs
+        source metadata from the selected record and charge/multiplicity from
+        the selected structure.
+        With a global structure selector (structure_id), this uses defaults
+        and fills only charge/multiplicity from the selected structure.
         """
         from chemsmart.database.database import Database
         from chemsmart.database.utils import resolve_record
@@ -404,8 +406,7 @@ class ORCAJobSettings(MolecularJobSettings):
         record_selected = record_index is not None or record_id is not None
         if structure_id is not None and record_selected:
             raise ValueError(
-                "Use either structure_id for geometry-only mode or "
-                "record_index/record_id for record-context mode, not both."
+                "Use either structure_id or record_index/record_id, not both."
             )
 
         settings = cls.default()
@@ -420,11 +421,11 @@ class ORCAJobSettings(MolecularJobSettings):
             settings.charge = structure.get("charge")
             settings.multiplicity = structure.get("multiplicity")
             settings.title = (
-                "Geometry-only job prepared from chemsmart database "
+                "Job prepared from chemsmart database "
                 f"{os.path.basename(filepath)}"
             )
             logger.info(
-                "Created geometry-only ORCAJobSettings from database: "
+                "Created ORCAJobSettings from database: "
                 f"charge={settings.charge}, "
                 f"multiplicity={settings.multiplicity}"
             )
@@ -463,8 +464,7 @@ class ORCAJobSettings(MolecularJobSettings):
         logger.info(
             "Created ORCAJobSettings from database: "
             f"charge={settings.charge}, "
-            f"multiplicity={settings.multiplicity}, "
-            f"functional={settings.functional}, basis={settings.basis}"
+            f"multiplicity={settings.multiplicity}"
         )
         return settings
 

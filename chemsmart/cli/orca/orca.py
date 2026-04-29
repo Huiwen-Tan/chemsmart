@@ -432,24 +432,6 @@ def orca(
     if forces is not None:
         job_settings.forces = forces
         keywords += ("forces",)
-    if is_database_file:
-        if record_index is not None or record_id is not None:
-            database_keywords = []
-            if job_settings.functional is not None:
-                database_keywords.append("functional")
-            if job_settings.basis is not None:
-                database_keywords.append("basis")
-            if job_settings.solvent_model is not None:
-                database_keywords.append("solvent_model")
-            if job_settings.solvent_id is not None:
-                database_keywords.append("solvent_id")
-            if job_settings.custom_solvent is not None:
-                database_keywords.append("custom_solvent")
-            keywords += tuple(
-                keyword
-                for keyword in database_keywords
-                if keyword not in keywords
-            )
 
     # obtain molecule structure from file or PubChem
     molecules = None
@@ -512,22 +494,22 @@ def orca(
         label = os.path.splitext(os.path.basename(filename))[0]
         if is_database_file:
             if structure_id is not None:
-                label = f"{label}_SID{structure_id}"
+                label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
-                label = f"{label}_RID{record_id}"
+                label = f"{label}_RID-{record_id}"
             elif record_index is not None:
-                label = f"{label}_RI{record_index}"
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{append_label}"
         logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filename))[0]
         if is_database_file:
             if structure_id is not None:
-                label = f"{label}_SID{structure_id}"
+                label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
-                label = f"{label}_RID{record_id}"
+                label = f"{label}_RID-{record_id}"
             elif record_index is not None:
-                label = f"{label}_RI{record_index}"
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{ctx.invoked_subcommand}"
         logger.debug(f"Created default label: {label}")
 

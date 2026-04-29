@@ -500,13 +500,13 @@ def mol(
         label = os.path.splitext(os.path.basename(filenames))[0]
         if is_database_file:
             if structure_id is not None:
-                label = f"{label}_SID{structure_id}"
+                label = f"{label}_SID-{structure_id}"
             elif record_id is not None:
-                label = f"{label}_RID{record_id}"
+                label = f"{label}_RID-{record_id}"
             elif record_index is not None:
-                label = f"{label}_RI{record_index}"
+                label = f"{label}_RI-{record_index}"
             elif molecule_id is not None:
-                label = f"{label}_MID{molecule_id}"
+                label = f"{label}_MID-{molecule_id}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
         label = os.path.splitext(os.path.basename(filenames))[0]
