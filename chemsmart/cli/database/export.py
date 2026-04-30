@@ -36,15 +36,32 @@ def click_export_options(f):
         "record_id",
         type=str,
         default=None,
-        help="Record ID (or prefix, at least 12 chars) to export.",
+        help="Record ID (or prefix) to export.",
     )
     @click.option(
         "--si",
         "--structure-index",
         "structure_index",
         type=str,
-        default="-1",
-        help="Structure index (1-based) within the record. Default: -1 (last structure).",
+        default=None,
+        help="Structure index (1-based) within the selected record. "
+        "Defaults to the last structure when used with --ri/--rid.",
+    )
+    @click.option(
+        "--sid",
+        "--structure-id",
+        "structure_id",
+        type=str,
+        default=None,
+        help="Structure ID (or prefix) to export as a single structure.",
+    )
+    @click.option(
+        "--mid",
+        "--molecule-id",
+        "molecule_id",
+        type=str,
+        default=None,
+        help="Molecule ID (or prefix); exports every conformer of that molecule.",
     )
     @click.option(
         "-k",
@@ -52,7 +69,7 @@ def click_export_options(f):
         type=str,
         default=None,
         help=(
-            "Comma-separated scalar keys for CSV export. "
+            "Comma-separated extra scalar keys for CSV export. "
             f"Supported: {', '.join(sorted(CSV_OPTIONAL_COLUMNS))}"
         ),
     )
@@ -73,15 +90,29 @@ def click_export_options(f):
 @database.command(cls=MyCommand)
 @click_export_options
 @click.pass_context
-def export(ctx, file, record_index, record_id, structure_index, keys, output):
+def export(
+    ctx,
+    file,
+    record_index,
+    record_id,
+    structure_index,
+    structure_id,
+    molecule_id,
+    keys,
+    output,
+):
     """Export records from a chemsmart database.
 
     The output format is inferred from the file extension of -o/--output:
 
     \b
-      .json  – Full record data (or filtered by --ri/--rid)
-      .csv   – Scalar properties table (one row per record)
-      .xyz   – Structure coordinates (single or multiple as frames; requires --ri/--rid)
+      .json  - Full structured database content
+      .csv   - Scalar properties table
+      .xyz   - Cartesian coordinates of selected structure(s)
+
+    \b
+    JSON and CSV always export the entire database; selection options
+    (--ri/--rid/--si/--sid/--mid) are accepted only for XYZ.
 
     \b
     Default CSV columns: record_index, record_id, chemical_formula.
@@ -89,16 +120,19 @@ def export(ctx, file, record_index, record_id, structure_index, keys, output):
 
     \b
     Supported CSV keys:
-      program, functional, basis, charge, multiplicity, smiles,
+      program, method, basis, charge, multiplicity, smiles,
       total_energy, homo_energy, lumo_energy, fmo_gap,
       zero_point_energy, enthalpy, entropy, gibbs_free_energy
 
     \b
     Examples:
-        chemsmart run database export -f my.db -o my.json
-        chemsmart run database export -f my.db --ri 4 -o mol.xyz
-        chemsmart run database export -f my.db --ri 4 --si ':' -o trajectory.xyz
-        chemsmart run database export -f my.db -k total_energy,homo_energy,lumo_energy -o training_set.csv
+        chemsmart run database export -f my.db -o data.json
+        chemsmart run database export -f my.db -k total_energy,homo_energy -o training.csv
+        chemsmart run database export -f my.db --rid a1b2c3d45e6f -o final.xyz
+        chemsmart run database export -f my.db --ri 2 --si 3 -o step3.xyz
+        chemsmart run database export -f my.db --ri 2 --si ':' -o traj.xyz
+        chemsmart run database export -f my.db --sid 0df6b2ea4bdc -o struct.xyz
+        chemsmart run database export -f my.db --mid BLQJIBCZHWBKSL-U -o conformers.xyz
     """
     # Validate input database
     file = os.path.abspath(file)
@@ -112,21 +146,57 @@ def export(ctx, file, record_index, record_id, structure_index, keys, output):
             f"File {file} is not a valid chemsmart database file."
         )
 
-    # Mutual exclusivity: --ri and --rid
-    if record_index is not None and record_id is not None:
-        raise click.UsageError(
-            "Options --ri/--record-index and --rid/--record-id are mutually exclusive."
-        )
-
-    # XYZ format requires --ri/--rid
-    ext = os.path.splitext(output)[1].lower()
-    if ext == ".xyz":
-        if record_index is None and record_id is None:
-            raise click.UsageError(
-                "XYZ export requires --ri/--record-index or --rid/--record-id to select a record."
-            )
-
     output = os.path.abspath(output)
+    ext = os.path.splitext(output)[1].lower()
+
+    selectors = {
+        "--ri/--record-index": record_index,
+        "--rid/--record-id": record_id,
+        "--si/--structure-index": structure_index,
+        "--sid/--structure-id": structure_id,
+        "--mid/--molecule-id": molecule_id,
+    }
+    used_selectors = [k for k, v in selectors.items() if v is not None]
+
+    if ext in (".json", ".csv"):
+        if used_selectors:
+            raise click.UsageError(
+                f"{ext} export always covers the entire database; "
+                f"selection options {', '.join(used_selectors)} are not "
+                "allowed. They are only valid for .xyz exports."
+            )
+        if ext == ".json" and keys is not None:
+            raise click.UsageError("-k/--keys is only valid for .csv exports.")
+    elif ext == ".xyz":
+        if keys is not None:
+            raise click.UsageError("-k/--keys is only valid for .csv exports.")
+        # Mutual exclusivity among record/structure/molecule selectors
+        primary = [
+            ("--ri/--record-index", record_index),
+            ("--rid/--record-id", record_id),
+            ("--sid/--structure-id", structure_id),
+            ("--mid/--molecule-id", molecule_id),
+        ]
+        primary_used = [name for name, val in primary if val is not None]
+        if len(primary_used) == 0:
+            raise click.UsageError(
+                "XYZ export requires exactly one of "
+                "--ri/--record-index, --rid/--record-id, "
+                "--sid/--structure-id, or --mid/--molecule-id."
+            )
+        if len(primary_used) > 1:
+            raise click.UsageError(
+                f"Selectors {', '.join(primary_used)} are mutually "
+                "exclusive; please specify exactly one."
+            )
+        # --si only valid with --ri/--rid
+        if structure_index is not None and not (
+            record_index is not None or record_id is not None
+        ):
+            raise click.UsageError(
+                "--si/--structure-index can only be used together with "
+                "--ri/--record-index or --rid/--record-id."
+            )
 
     exporter = DatabaseExporter(
         db_file=file,
@@ -134,6 +204,8 @@ def export(ctx, file, record_index, record_id, structure_index, keys, output):
         record_index=record_index,
         record_id=record_id,
         structure_index=structure_index,
+        structure_id=structure_id,
+        molecule_id=molecule_id,
         keys=keys,
     )
 
