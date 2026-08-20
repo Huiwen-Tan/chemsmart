@@ -270,13 +270,17 @@ class ThermochemistryJob(Job):
             **kwargs,
         )
 
-    def compute_thermochemistry(self):
+    def compute_thermochemistry(self, sp_matcher=None, sp_types=None):
         """
         Perform thermochemistry calculation and save results.
 
         Computes thermochemical properties including electronic energy,
         zero-point energy, thermal corrections, enthalpy, entropy, and
         Gibbs free energy from frequency calculation data.
+
+        Args:
+            sp_matcher: SPEnergyMatcher instance for looking up SP energies.
+            sp_types: List of SP types to include in output columns.
 
         Raises:
             ValueError: If no input file is provided
@@ -315,6 +319,13 @@ class ThermochemistryJob(Job):
                 gibbs_free_energy,
                 qrrho_gibbs_free_energy,
             ) = thermochemistry.compute_thermochemistry()
+
+            sp_energies = {}
+            if sp_matcher is not None and self.molecule is not None:
+                sp_energies = sp_matcher.get_sp_energies_for_structure(
+                    self.molecule.structure_id
+                )
+
             thermochemistry.log_results_to_file(
                 structure,
                 electronic_energy,
@@ -328,6 +339,8 @@ class ThermochemistryJob(Job):
                 outputfile=self.settings.outputfile,
                 overwrite=self.settings.overwrite,
                 write_header=self.settings.write_header,
+                sp_energies=sp_energies,
+                sp_types=sp_types,
             )
 
         except Exception as e:

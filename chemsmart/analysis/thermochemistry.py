@@ -25,6 +25,7 @@ from chemsmart.utils.references import (
     qrrho_header,
     truhlar_quasi_rrho_entropy_ref,
 )
+from chemsmart.utils.utils import build_method
 
 logger = logging.getLogger(__name__)
 
@@ -1112,6 +1113,25 @@ class Thermochemistry:
             return None
         return self.qrrho_enthalpy - self.entropy_times_temperature
 
+    @property
+    def gibbs_free_energy_correction(self):
+        """Obtain the Gibbs free energy correction in J mol^-1.
+        Formula:
+        G_corr = G(T) - E
+            or = qh-G(T) - E when qRRHO corrections are applied.
+        """
+        if self.s_freq_cutoff and self.h_freq_cutoff:
+            gibbs_free_energy = self.qrrho_gibbs_free_energy
+        elif self.s_freq_cutoff and not self.h_freq_cutoff:
+            gibbs_free_energy = self.qrrho_gibbs_free_energy_qs
+        elif not self.s_freq_cutoff and self.h_freq_cutoff:
+            gibbs_free_energy = self.qrrho_gibbs_free_energy_qh
+        else:
+            gibbs_free_energy = self.gibbs_free_energy
+        if gibbs_free_energy is None:
+            return None
+        return gibbs_free_energy - self.electronic_energy
+
     def compute_thermochemistry(self):
         """Compute Boltzmann-averaged properties."""
         logger.debug(f"Computing thermochemistry for {self.filename}...")
@@ -1280,6 +1300,8 @@ class Thermochemistry:
         outputfile=None,
         overwrite=False,
         write_header=True,
+        sp_energies=None,
+        sp_types=None,
     ):
         """
         Log thermochemistry results to a structured output file.
@@ -1337,6 +1359,10 @@ class Thermochemistry:
             If True, writes the header block before results. Set to False
             to skip header writing (useful when appending multiple times
             without changing conditions).
+        sp_energies : dict, optional
+            Dictionary mapping SP type to SP electronic energy.
+        sp_types : list, optional
+            List of all SP types to include in output.
 
         Notes
         -----
@@ -1349,11 +1375,25 @@ class Thermochemistry:
         - Column structure automatically adjusts to include or exclude
           qh-corrected values depending on whether entropy and/or enthalpy
           cutoffs were applied.
+        - When sp_types is provided, additional columns for E_sp and G_sp
+          (or qh-G_sp when quasi-harmonic cutoffs are enabled) are added for
+          each SP type.
         """
 
         # Default output file
         if outputfile is None:
             outputfile = os.path.splitext(self.filename)[0] + ".dat"
+
+        # Normalize sp_energies and sp_types
+        if sp_energies is None:
+            sp_energies = {}
+        if sp_types is None:
+            sp_types = []
+
+        # G_corr / qh-G_corr in output units: E_sp + correction → SP G / SP qh-G
+        gibbs_free_energy_correction = energy_conversion(
+            "j/mol", self.energy_units, self.gibbs_free_energy_correction
+        )
 
         # Check if all thermochemistry values are None
         all_none = all(
@@ -1367,11 +1407,6 @@ class Thermochemistry:
                 gibbs_free_energy,
                 qrrho_gibbs_free_energy,
             ]
-        )
-        no_freq = "{:39} {:13.6f}   {:<69}\n".format(
-            structure,
-            electronic_energy,
-            "--- [NO FREQ INFO] Thermochemistry skipped. ---",
         )
 
         def build_header():
@@ -1403,6 +1438,11 @@ class Thermochemistry:
             header += f"Mass Weighted: {used_mass}\n"
             header += f"Energy Unit: {self.energy_units}\n\n"
 
+            if sp_types:
+                for i, sp_type in enumerate(sp_types, start=1):
+                    header += f"SP{i}: {sp_type}\n"
+            header += "\n"
+
             if self.h_freq_cutoff or self.s_freq_cutoff:
                 header += qrrho_header
                 header += head_gordon_damping_function_ref
@@ -1416,7 +1456,7 @@ class Thermochemistry:
 
             # Column headers based on corrections
             if self.h_freq_cutoff and self.s_freq_cutoff:
-                header += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                base_cols = [
                     "Structure",
                     "E",
                     "ZPE",
@@ -1426,10 +1466,10 @@ class Thermochemistry:
                     "T.qh-S",
                     "G(T)",
                     "qh-G(T)",
-                )
-                header += "=" * 142 + "\n"
+                ]
+                base_widths = [39, 13, 10, 13, 13, 10, 10, 13, 13]
             elif self.s_freq_cutoff:
-                header += "{:<39} {:>13} {:>10} {:>13} {:>10} {:>10} {:>13} {:>13}\n".format(
+                base_cols = [
                     "Structure",
                     "E",
                     "ZPE",
@@ -1438,10 +1478,10 @@ class Thermochemistry:
                     "T.qh-S",
                     "G(T)",
                     "qh-G(T)",
-                )
-                header += "=" * 128 + "\n"
+                ]
+                base_widths = [39, 13, 10, 13, 10, 10, 13, 13]
             elif self.h_freq_cutoff:
-                header += "{:<39} {:>13} {:>10} {:>13} {:>13} {:>10} {:>13} {:>13}\n".format(
+                base_cols = [
                     "Structure",
                     "E",
                     "ZPE",
@@ -1450,22 +1490,66 @@ class Thermochemistry:
                     "T.S",
                     "G(T)",
                     "qh-G(T)",
-                )
-                header += "=" * 131 + "\n"
+                ]
+                base_widths = [39, 13, 10, 13, 13, 10, 13, 13]
             else:
-                header += "{:<39} {:>13} {:>10} {:>13} {:>10} {:>13}\n".format(
-                    "Structure", "E", "ZPE", "H", "T.S", "G(T)"
-                )
-                header += "=" * 103 + "\n"
+                base_cols = ["Structure", "E", "ZPE", "H", "T.S", "G(T)"]
+                base_widths = [39, 13, 10, 13, 10, 13]
+
+            # Add SP columns if sp_types provided (use SP1, SP2, etc.)
+            sp_col_width = 13
+            qh_enabled = bool(self.h_freq_cutoff or self.s_freq_cutoff)
+            sp_g_label = "qh-G" if qh_enabled else "G"
+            for i in range(len(sp_types)):
+                sp_num = i + 1
+                base_cols.append(f"SP{sp_num} E")
+                base_widths.append(sp_col_width)
+                base_cols.append(f"SP{sp_num} {sp_g_label}")
+                base_widths.append(sp_col_width)
+
+            # Build header line
+            fmt_parts = []
+            for i, (col, width) in enumerate(zip(base_cols, base_widths)):
+                if i == 0:
+                    fmt_parts.append(f"{{:<{width}}}")
+                else:
+                    fmt_parts.append(f"{{:>{width}}}")
+            header += " ".join(fmt_parts).format(*base_cols) + "\n"
+            header += "=" * sum(base_widths + [len(base_widths) - 1]) + "\n"
             return header
 
         def build_row():
             """Return formatted data row string depending on corrections."""
+            sp_col_width = 13
+
+            # Build SP columns
+            sp_column = ""
+            if sp_types:
+                for sp_type in sp_types:
+                    sp_energy = sp_energies.get(sp_type)
+                    if (
+                        sp_energy is not None
+                        and gibbs_free_energy_correction is not None
+                    ):
+                        sp_corrected_gibbs_free_energy = (
+                            sp_energy + gibbs_free_energy_correction
+                        )
+                        sp_column += f" {sp_energy:{sp_col_width}.6f} {sp_corrected_gibbs_free_energy:{sp_col_width}.6f}"
+                    else:
+                        sp_column += (
+                            f" {'---':>{sp_col_width}} {'---':>{sp_col_width}}"
+                        )
+
             if all_none:
-                return no_freq
+                no_freq_base = "{:39} {:13.6f}   {:<69}".format(
+                    structure,
+                    electronic_energy,
+                    "--- [NO FREQ INFO] Thermochemistry skipped. ---",
+                )
+                return no_freq_base + "\n"
 
             if self.h_freq_cutoff and self.s_freq_cutoff:
-                return "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                base = "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
                     structure,
                     electronic_energy,
                     zero_point_energy,
@@ -1477,7 +1561,7 @@ class Thermochemistry:
                     qrrho_gibbs_free_energy,
                 )
             elif self.s_freq_cutoff:
-                return "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                base = "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:10.6f} {:13.6f} {:13.6f}".format(
                     structure,
                     electronic_energy,
                     zero_point_energy,
@@ -1488,7 +1572,7 @@ class Thermochemistry:
                     qrrho_gibbs_free_energy,
                 )
             elif self.h_freq_cutoff:
-                return "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}\n".format(
+                base = "{:39} {:13.6f} {:10.6f} {:13.6f} {:13.6f} {:10.6f} {:13.6f} {:13.6f}".format(
                     structure,
                     electronic_energy,
                     zero_point_energy,
@@ -1499,7 +1583,7 @@ class Thermochemistry:
                     qrrho_gibbs_free_energy,
                 )
             else:
-                return "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}\n".format(
+                base = "{:39} {:13.6f} {:10.6f} {:13.6f} {:10.6f} {:13.6f}".format(
                     structure,
                     electronic_energy,
                     zero_point_energy,
@@ -1507,6 +1591,7 @@ class Thermochemistry:
                     entropy_times_temperature,
                     gibbs_free_energy,
                 )
+            return base + sp_column + "\n"
 
         # Handle file writing
         if os.path.exists(outputfile):
@@ -1526,6 +1611,152 @@ class Thermochemistry:
             out.write(build_row())
 
         logger.info(f"Thermochemistry results saved to {outputfile}")
+
+
+class SPEnergyMatcher:
+    """Match opt/ts files with corresponding SP files using structure_id.
+
+    Args:
+        files: List of calculation output files.
+        energy_units: The energy units to use for output. Default is "hartree".
+    """
+
+    def __init__(self, files, energy_units="hartree"):
+        self.files = files
+        self.energy_units = energy_units
+
+    @cached_property
+    def file_objects(self):
+        """Build output file objects."""
+        file_objects = []
+        for file in self.files:
+            try:
+                program = get_program_type_from_file(file)
+                if program == "gaussian":
+                    file_object = Gaussian16Output(file)
+                elif program == "orca":
+                    file_object = ORCAOutput(file)
+                elif program == "xtb":
+                    folder = os.path.dirname(os.path.abspath(file))
+                    file_object = XTBOutput(folder)
+                else:
+                    file_object = None
+            except Exception as e:
+                logger.debug(f"Failed to build output object for {file}: {e}")
+                file_object = None
+            file_objects.append(file_object)
+        return file_objects
+
+    @cached_property
+    def sp_calculations(self):
+        """Return normally terminated single-point calculations."""
+        sp_calculations = []
+        for file, output in zip(self.files, self.file_objects):
+            if output is None:
+                continue
+            try:
+                if (
+                    output.normal_termination
+                    and not output.freq
+                    and output.jobtype == "sp"
+                ):
+                    sp_calculations.append((file, output))
+            except Exception as e:
+                logger.debug(f"Failed to inspect calculation {file}: {e}")
+        return sp_calculations
+
+    @cached_property
+    def freq_structure_ids(self):
+        """Return structure_ids of files with frequency data."""
+        structure_ids = set()
+        for file, output in zip(self.files, self.file_objects):
+            if output is None:
+                continue
+            try:
+                if output.normal_termination and output.freq:
+                    molecule = Molecule.from_filepath(file)
+                    if molecule is not None:
+                        structure_ids.add(molecule.structure_id)
+            except Exception as e:
+                logger.debug(f"Failed to get structure_id for {file}: {e}")
+        return structure_ids
+
+    @cached_property
+    def sp_by_structure(self):
+        """Group SP types and energies by structure_id.
+
+        Only includes SP calculations that match a file with frequency data.
+        """
+        sp_by_structure = {}
+        for file, output in self.sp_calculations:
+            try:
+                molecule = Molecule.from_filepath(file)
+                if molecule is None:
+                    continue
+                structure_id = molecule.structure_id
+                if structure_id not in self.freq_structure_ids:
+                    continue
+                sp_type = build_method(
+                    output.method,
+                    output.basis,
+                    output.solvent_model,
+                    output.solvent_id,
+                )
+                sp_energy = energy_conversion(
+                    "hartree", self.energy_units, output.energies[-1]
+                )
+                if structure_id not in sp_by_structure:
+                    sp_by_structure[structure_id] = []
+                sp_by_structure[structure_id].append((sp_type, sp_energy))
+            except Exception as e:
+                logger.debug(f"Failed to process SP calculation {file}: {e}")
+        return sp_by_structure
+
+    @cached_property
+    def matched_sp_files(self):
+        """Return SP files that match a file with frequency data.
+
+        These are SP files whose structure_id exists in freq_structure_ids.
+        Orphan SPs (those without matching freq files) are not included.
+        """
+        matched = set()
+        for file, output in self.sp_calculations:
+            try:
+                molecule = Molecule.from_filepath(file)
+                if molecule is not None:
+                    if molecule.structure_id in self.freq_structure_ids:
+                        matched.add(file)
+            except Exception as e:
+                logger.debug(f"Failed to match SP calculation {file}: {e}")
+        return matched
+
+    def get_sp_energies_for_structure(self, structure_id):
+        """Get all SP energies for a given structure_id.
+
+        Args:
+            structure_id: The structure_id to look up.
+        """
+        if structure_id not in self.sp_by_structure:
+            return {}
+        return {
+            sp_type: energy
+            for sp_type, energy in self.sp_by_structure[structure_id]
+        }
+
+    @cached_property
+    def sp_types(self):
+        """Get unique SP types that match files with frequency data.
+
+        Returns:
+            List of SP type strings, sorted alphabetically.
+        """
+        return sorted(
+            {
+                sp_type
+                for pairs in self.sp_by_structure.values()
+                for sp_type, _ in pairs
+            }
+        )
 
 
 class BoltzmannAverageThermochemistry(Thermochemistry):

@@ -3,6 +3,7 @@ import os
 
 import click
 
+from chemsmart.analysis.thermochemistry import SPEnergyMatcher
 from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filenames_options,
@@ -171,6 +172,16 @@ def click_thermochemistry_options(f):
         show_default=True,
         help="Check for imaginary frequencies in the calculations.",
     )(f)
+    f = click.option(
+        "-sp",
+        "--include-single-point/--no-include-single-point",
+        is_flag=True,
+        default=False,
+        show_default=True,
+        help="Include single-point energies in output. Matches SP files by "
+        "structure_id and adds E_sp and G_sp (or qh-G_sp if quasi-RRHO enabled) "
+        "columns for each SP type.",
+    )(f)
     return f
 
 
@@ -200,6 +211,7 @@ def thermochemistry(
     outputfile,
     overwrite,
     check_imaginary_frequencies,
+    include_single_point,
     skip_completed,
     **kwargs,
 ):
@@ -267,6 +279,7 @@ def thermochemistry(
         outputfile=outputfile,
         overwrite=overwrite,
         check_imaginary_frequencies=check_imaginary_frequencies,
+        include_single_point=include_single_point,
     )
 
     # Initialize list to store jobs
@@ -383,12 +396,28 @@ def thermochemistry(
 
     logger.debug(f"Thermochemistry jobs created: {len(jobs)}")
 
+    # Build SP matcher early if include_single_point is enabled
+    # to identify which SP files match freq files
+    sp_matcher = None
+    if include_single_point and jobs:
+        sp_matcher = SPEnergyMatcher(
+            [j.filename for j in jobs],
+            energy_units=job_settings.energy_units,
+        )
+        matched_sp_files = sp_matcher.matched_sp_files
+        jobs = [j for j in jobs if j.filename not in matched_sp_files]
+        logger.debug(
+            f"Filtered out {len(matched_sp_files)} matched SP files "
+            f"from jobs list"
+        )
+
     # Store objects in context
     ctx.obj["job_settings"] = job_settings
     ctx.obj["jobs"] = jobs
     ctx.obj["filenames"] = (
         filenames if filenames else files if directory else None
     )
+    ctx.obj["sp_matcher"] = sp_matcher
     ctx.obj["directory"] = directory
     ctx.obj["program"] = program
     ctx.obj["outputfile"] = outputfile
@@ -406,13 +435,25 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
 
     jobs = ctx.obj.get("jobs", [])
     outputfile = ctx.obj.get("outputfile", None)
+    sp_matcher = ctx.obj.get("sp_matcher")
+
     logger.debug(f"Jobs to process:{jobs}")
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
         logger.info("Running thermochemistry calculations on specified jobs.")
+
+        # Get SP types if sp_matcher is available
+        sp_types = []
+        if sp_matcher is not None:
+            sp_types = sp_matcher.sp_types
+            logger.info(f"Found SP types: {sp_types}")
+
         for job in jobs:
             try:
-                job.compute_thermochemistry()
+                job.compute_thermochemistry(
+                    sp_matcher=sp_matcher,
+                    sp_types=sp_types,
+                )
                 logger.info(
                     f"Thermochemistry calculation completed for {job.label}."
                 )

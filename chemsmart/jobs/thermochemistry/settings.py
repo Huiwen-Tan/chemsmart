@@ -35,6 +35,7 @@ class ThermochemistryJobSettings:
         check_imaginary_frequencies (bool):
         Validate absence of imaginary modes.
         write_header (bool): Write header to output file when True.
+        include_single_point (bool): Include single-point energies in output when True.
     """
 
     def __init__(
@@ -52,6 +53,7 @@ class ThermochemistryJobSettings:
         overwrite=False,
         check_imaginary_frequencies=True,
         write_header=True,
+        include_single_point=False,
     ):
         """
         Initialize thermochemistry job settings.
@@ -71,6 +73,8 @@ class ThermochemistryJobSettings:
             check_imaginary_frequencies (bool): Check for imaginary frequencies
             write_header (bool): Whether to write
             header to output file (default: True)
+            include_single_point (bool): Whether to include single-point energies
+            in output (default: False)
         """
         logger.debug("Initializing ThermochemistryJobSettings")
         self.temperature = temperature
@@ -86,6 +90,7 @@ class ThermochemistryJobSettings:
         self.overwrite = overwrite
         self.check_imaginary_frequencies = check_imaginary_frequencies
         self.write_header = write_header
+        self.include_single_point = include_single_point
 
     def copy(self):
         """
@@ -108,6 +113,7 @@ class ThermochemistryJobSettings:
             overwrite=self.overwrite,
             check_imaginary_frequencies=self.check_imaginary_frequencies,
             write_header=self.write_header,
+            include_single_point=self.include_single_point,
         )
 
     @classmethod
