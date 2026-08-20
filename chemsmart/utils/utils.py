@@ -25,6 +25,55 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+SOLVENT_LABELS = {
+    # Protic solvents
+    "water": "H2O",
+    "methanol": "MeOH",
+    "ethanol": "EtOH",
+    "2-propanol": "iPrOH",
+    "isopropanol": "iPrOH",
+    "tert-butanol": "tBuOH",
+    "trifluoroethanol": "TFE",
+    "hexafluoroisopropanol": "HFIP",
+    "acetic acid": "AcOH",
+    # Polar aprotic solvents
+    "acetone": "acetone",
+    "acetonitrile": "MeCN",
+    "dimethylformamide": "DMF",
+    "n,n-dimethylformamide": "DMF",
+    "dimethylacetamide": "DMAc",
+    "dimethylsulfoxide": "DMSO",
+    "n-methyl-2-pyrrolidone": "NMP",
+    "nitromethane": "nitromethane",
+    # Ethers
+    "tetrahydrofuran": "THF",
+    "2-methyltetrahydrofuran": "2-MeTHF",
+    "1,4-dioxane": "1,4-dioxane",
+    "diethylether": "Et2O",
+    "diethyl ether": "Et2O",
+    # Halogenated solvents
+    "dichloromethane": "DCM",
+    "dichloroethane": "DCE",
+    "1,2-dichloroethane": "DCE",
+    "chloroform": "CHCl3",
+    "carbon tetrachloride": "CCl4",
+    "chlorobenzene": "chlorobenzene",
+    # Aromatic solvents
+    "benzene": "benzene",
+    "toluene": "toluene",
+    "anisole": "anisole",
+    "pyridine": "pyridine",
+    # Hydrocarbon solvents
+    "n-hexane": "n-hexane",
+    "cyclohexane": "cyclohexane",
+    # Other commonly encountered solvents
+    "ethyl acetate": "EtOAc",
+    "carbon disulfide": "CS2",
+    # User-defined solvent parameters
+    "generic": "custom",
+    "generic,read": "custom",
+}
+
 
 class OrderedSet:
     """
@@ -2110,3 +2159,30 @@ def deduplicate_string_keywords(route_string, keywords):
         new_tokens.append(token)
 
     return " ".join(new_tokens)
+
+
+def build_method(method, basis=None, solvent_model=None, solvent_id=None):
+    """Build a compact computational-method label.
+    Examples
+    --------
+    SMD(DCE)-B3LYP-D3BJ/DEF2-TZVP
+    B3LYP-D3BJ/DEF2-SVP
+    CCSD(T)/CC-PVTZ
+    PM6
+    ALPB(H2O)-GFN2
+    """
+    parts = []
+    if solvent_model and solvent_id:
+        solvent_model = solvent_model.upper()
+        solvent_id = (
+            SOLVENT_LABELS[solvent_id]
+            if solvent_id in SOLVENT_LABELS
+            else solvent_id
+        )
+        parts.append(f"{solvent_model}({solvent_id})")
+    if method:
+        parts.append(method.upper())
+    label = "-".join(parts) if parts else ""
+    if basis:
+        label = f"{label}/{basis.upper()}" if label else basis.upper()
+    return label or None

@@ -8,6 +8,7 @@ import pytest
 
 from chemsmart.utils.utils import (
     OrderedSet,
+    build_method,
     check_charge_and_multiplicity,
     content_blocks_by_paragraph,
     convert_modred_list_to_string,
@@ -632,3 +633,53 @@ class TestExtractNumber:
     def test_no_number_returns_inf(self):
         """Test no number returns infinity."""
         assert extract_number("abc") == float("inf")
+
+
+class TestBuildMethod:
+    """Tests for the build_method function."""
+
+    def test_build_method(self):
+        assert (
+            build_method(
+                method="b3lyp-d3bj",
+                basis="def2-tzvp",
+                solvent_model="smd",
+                solvent_id="dichloroethane",
+            )
+            == "SMD(DCE)-B3LYP-D3BJ/DEF2-TZVP"
+        )
+
+        assert (
+            build_method(
+                method="b3lyp-d3bj",
+                basis="def2-svp",
+            )
+            == "B3LYP-D3BJ/DEF2-SVP"
+        )
+
+        assert (
+            build_method(
+                method="ccsd(t)",
+                basis="cc-pvtz",
+            )
+            == "CCSD(T)/CC-PVTZ"
+        )
+
+        assert (
+            build_method(
+                method="gfn2",
+                solvent_model="alpb",
+                solvent_id="water",
+            )
+            == "ALPB(H2O)-GFN2"
+        )
+
+        assert (
+            build_method(
+                method="mn15",
+                basis="def2-qzvp",
+                solvent_model="smd",
+                solvent_id="unknown-solvent",
+            )
+            == "SMD(unknown-solvent)-MN15/DEF2-QZVP"
+        )
