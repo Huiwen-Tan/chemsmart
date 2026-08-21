@@ -1829,6 +1829,11 @@ def xtb_co2_outfolder(xtb_outputs_directory):
 
 
 @pytest.fixture()
+def xtb_co2_sp_outfolder(xtb_outputs_directory):
+    return os.path.join(xtb_outputs_directory, "co2_ohess_sp_gbsa_toluene")
+
+
+@pytest.fixture()
 def xtb_water_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "water_ohess")
 

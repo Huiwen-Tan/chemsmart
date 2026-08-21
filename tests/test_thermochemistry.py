@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
+    SPEnergyMatcher,
     Thermochemistry,
 )
 from chemsmart.io.gaussian.output import Gaussian16Output
@@ -3222,6 +3223,93 @@ class TestThermochemistryEntropyMethod:
         )
 
 
+class TestSPEnergyMatcher:
+    """Tests for SP energy matching with real Gaussian, ORCA, and xTB outputs."""
+
+    def test_sp_energy_matcher_gaussian(
+        self,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+    ):
+        """Match Gaussian opt+freq with a solvated SP on the same structure."""
+        matcher = SPEnergyMatcher(
+            [
+                gaussian_pKa_HB_optimization_outputfile,
+                gaussian_pKa_HB_single_point_outputfile,
+            ]
+        )
+        freq_mol = Molecule.from_filepath(
+            gaussian_pKa_HB_optimization_outputfile
+        )
+        sp_mol = Molecule.from_filepath(
+            gaussian_pKa_HB_single_point_outputfile
+        )
+        assert freq_mol.structure_id == sp_mol.structure_id
+        assert matcher.freq_structure_ids == {freq_mol.structure_id}
+        assert matcher.matched_sp_files == {
+            gaussian_pKa_HB_single_point_outputfile
+        }
+        assert matcher.sp_types == ["SMD(custom)-MN15/DEF2QZVP"]
+        energies = matcher.get_sp_energies_for_structure(freq_mol.structure_id)
+        assert energies["SMD(custom)-MN15/DEF2QZVP"] == -366.597435155
+
+    def test_sp_energy_matcher_orca(
+        self, water_output_gas_path, water_sp_gas_path
+    ):
+        """Match ORCA water opt+freq with gas-phase DLPNO-CCSD(T) SP."""
+        matcher = SPEnergyMatcher([water_output_gas_path, water_sp_gas_path])
+        freq_mol = Molecule.from_filepath(water_output_gas_path)
+        sp_mol = Molecule.from_filepath(water_sp_gas_path)
+        assert freq_mol.structure_id == sp_mol.structure_id
+        assert matcher.freq_structure_ids == {freq_mol.structure_id}
+        assert matcher.matched_sp_files == {water_sp_gas_path}
+        assert matcher.sp_types == ["DLPNO-CCSD(T)"]
+        energies = matcher.get_sp_energies_for_structure(freq_mol.structure_id)
+        assert energies["DLPNO-CCSD(T)"] == -76.377481488944
+
+    def test_sp_energy_matcher_xtb(
+        self, xtb_co2_outfolder, xtb_co2_sp_outfolder
+    ):
+        """Match xTB CO2 ohess with GBSA(toluene) SP."""
+        freq_file = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        sp_file = os.path.join(
+            xtb_co2_sp_outfolder, "co2_ohess_sp_gbsa_toluene.out"
+        )
+        matcher = SPEnergyMatcher([freq_file, sp_file])
+        freq_mol = Molecule.from_filepath(freq_file)
+        sp_mol = Molecule.from_filepath(sp_file)
+        assert freq_mol.structure_id == sp_mol.structure_id
+        assert matcher.freq_structure_ids == {freq_mol.structure_id}
+        assert matcher.matched_sp_files == {sp_file}
+        assert matcher.sp_types == ["GBSA(toluene)-GFN2/DEFAULT"]
+        energies = matcher.get_sp_energies_for_structure(freq_mol.structure_id)
+        assert energies["GBSA(toluene)-GFN2/DEFAULT"] == -10.309642148652
+
+    def test_sp_energy_matcher_freq_only(self, gaussian_mp2_outputfile):
+        """Opt+freq alone yields no SP matches."""
+        matcher = SPEnergyMatcher([gaussian_mp2_outputfile])
+        freq_mol = Molecule.from_filepath(gaussian_mp2_outputfile)
+        assert matcher.freq_structure_ids == {freq_mol.structure_id}
+        assert matcher.matched_sp_files == set()
+        assert matcher.sp_types == []
+        energies = matcher.get_sp_energies_for_structure(freq_mol.structure_id)
+        assert energies == {}
+
+    def test_sp_energy_matcher_unmatched_sp(
+        self, gaussian_mp2_outputfile, water_sp_gas_path
+    ):
+        """Do not match Gaussian MP2 opt+freq with an ORCA DLPNO-CCSD(T) SP of a different structure."""
+        matcher = SPEnergyMatcher([gaussian_mp2_outputfile, water_sp_gas_path])
+        freq_mol = Molecule.from_filepath(gaussian_mp2_outputfile)
+        sp_mol = Molecule.from_filepath(water_sp_gas_path)
+        assert freq_mol.structure_id != sp_mol.structure_id
+        assert matcher.freq_structure_ids == {freq_mol.structure_id}
+        assert matcher.matched_sp_files == set()
+        assert matcher.sp_types == []
+        energies = matcher.get_sp_energies_for_structure(freq_mol.structure_id)
+        assert energies == {}
+
+
 class TestBoltzmannWeightedAverage:
 
     def test_thermochemistry_boltzmann_electronic(
@@ -4577,3 +4665,74 @@ class TestThermochemistryCLIFolderOptions:
             for call in mock_from_filename.call_args_list
         ]
         assert xtb_output in discovered_files
+
+
+class TestThermochemistrySPCLI:
+    """Tests for thermochemistry CLI with -sp flag."""
+
+    def test_cli_sp_flag_sets_include_single_point(
+        self,
+        gaussian_singlet_opt_outfile,
+        mocker,
+    ):
+        """Test that -sp flag sets include_single_point in job settings."""
+        thermochemistry_module = importlib.import_module(
+            "chemsmart.cli.thermochemistry.thermochemistry"
+        )
+        mock_job = mocker.MagicMock()
+        mock_job.label = "gaussian_singlet_opt_sp"
+        mock_job.filename = gaussian_singlet_opt_outfile
+        mock_from_filename = mocker.patch.object(
+            thermochemistry_module.ThermochemistryJob,
+            "from_filename",
+            return_value=mock_job,
+        )
+
+        result = CliRunner().invoke(
+            thermochemistry_module.thermochemistry,
+            [
+                "-f",
+                gaussian_singlet_opt_outfile,
+                "-T",
+                "298.15",
+                "-sp",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+
+        settings = mock_from_filename.call_args.kwargs["settings"]
+        assert settings.include_single_point is True
+
+    def test_cli_sp_flag_default_false(
+        self,
+        gaussian_singlet_opt_outfile,
+        mocker,
+    ):
+        """Test that -sp flag defaults to False."""
+        thermochemistry_module = importlib.import_module(
+            "chemsmart.cli.thermochemistry.thermochemistry"
+        )
+        mock_job = mocker.MagicMock()
+        mock_job.label = "gaussian_singlet_opt"
+        mock_job.filename = gaussian_singlet_opt_outfile
+        mock_from_filename = mocker.patch.object(
+            thermochemistry_module.ThermochemistryJob,
+            "from_filename",
+            return_value=mock_job,
+        )
+
+        result = CliRunner().invoke(
+            thermochemistry_module.thermochemistry,
+            [
+                "-f",
+                gaussian_singlet_opt_outfile,
+                "-T",
+                "298.15",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+
+        settings = mock_from_filename.call_args.kwargs["settings"]
+        assert settings.include_single_point is False
