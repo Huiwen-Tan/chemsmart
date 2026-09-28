@@ -93,7 +93,7 @@ quoted with single quotes. Conditions can be combined with the case-insensitive 
          ``entropy``, ``gibbs_free_energy``, ``source_file``
 
    -  -  ``molecules``
-      -  ``chemical_formula``, ``smiles``, ``inchi``, ``number_of_atoms``, ``mass``
+      -  ``chemical_formula``, ``inchi``, ``number_of_atoms``, ``mass``
 
    -  -  ``structures``
       -  ``chemical_formula``, ``number_of_atoms``, ``charge``, ``multiplicity``

@@ -76,7 +76,7 @@ def query(ctx, file, target, query, limit):
     \b
       -t molecules:
         Query unique chemical species.
-        Fields: chemical_formula, smiles, number_of_atoms, mass
+        Fields: chemical_formula, inchi, number_of_atoms, mass
 
     \b
       -t structures:

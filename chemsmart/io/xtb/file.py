@@ -38,10 +38,10 @@ class XTBMainOut(XTBFileMixin):
         """Check if the xtb output file is terminated by checking each output file line from the last line onwards."""
         for line in reversed(self.contents):
             if "[ERROR]" in line:
-                logger.info(f"File {self.filename} has error termination.")
+                logger.warning(f"File {self.filename} has error termination.")
                 return False
             if "* finished run" in line:
-                logger.info(f"File {self.filename} terminated normally.")
+                logger.debug(f"File {self.filename} terminated normally.")
                 return True
         return False
 
@@ -312,12 +312,16 @@ class XTBMainOut(XTBFileMixin):
 
     @property
     def lumo_energy(self):
-        """Obtain LUMO energy of last optimized structure, in eV."""
+        """Obtain LUMO energy of the last structure, in eV.
+
+        xTB omits the (LUMO) line when no virtual orbital is printed,
+        as for helium. The missing LUMO is at the Fermi level, 0 eV.
+        """
         for line in reversed(self.contents):
             if "(LUMO)" in line:
                 lumo_energy = line.split()[-2]  # lumo energy in eV
                 return float(lumo_energy)
-        return None
+        return 0.0
 
     @property
     def c6_coefficient(self):

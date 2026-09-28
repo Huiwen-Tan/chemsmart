@@ -219,7 +219,6 @@ class BaseAssembler:
             "is_linear": mol.is_linear,
             "is_multicomponent": mol.is_multicomponent,
             "num_components": mol.num_components,
-            "smiles": mol.smiles,
             "inchi": mol.inchi,
             "chiral_centers": mol.chiral_centers,
             "moments_of_inertia": mol.moments_of_inertia,

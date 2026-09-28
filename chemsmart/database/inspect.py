@@ -626,7 +626,6 @@ class DatabaseInspector:
         lines.append(
             format_kv("Mass (amu)", format_float(struct.get("mass"), 4))
         )
-        lines.append(format_kv("SMILES", struct.get("smiles")))
 
         # Coordinates
         symbols = struct.get("chemical_symbols", [])
@@ -803,7 +802,6 @@ class DatabaseInspector:
         # Representation
         lines.append("")
         lines.append(separator("Representation"))
-        lines.append(format_kv("SMILES", molecule.get("smiles")))
         lines.append(format_kv("InChI", molecule.get("inchi")))
 
         # Compact element counts
@@ -953,7 +951,6 @@ class DatabaseInspector:
         lines.append(
             format_kv("Mass (amu)", format_float(structure.get("mass"), 4))
         )
-        lines.append(format_kv("SMILES", structure.get("smiles")))
 
         # Coordinates
         symbols = structure.get("chemical_symbols", [])

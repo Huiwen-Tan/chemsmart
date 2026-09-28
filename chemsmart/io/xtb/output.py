@@ -360,7 +360,7 @@ class XTBOutput(FolderOutputMixin):
         """
         # Tier 1: xtbopt.log (trajectory)
         if self.xtbopt_log_file:
-            logger.info(
+            logger.debug(
                 f"Reading molecule from file: {self.xtbopt_log_file.filepath}."
             )
             mols = self.xtbopt_log_file.get_molecules(":", return_list=True)
@@ -373,7 +373,7 @@ class XTBOutput(FolderOutputMixin):
 
         # Tier 2: xtbopt.xyz / xtbopt.sdf (optimized geometry)
         if self.xtbopt_geometry:
-            logger.info(
+            logger.debug(
                 f"Reading molecule from file: {self.xtbopt_geometry_file.filepath}."
             )
             mol = self.xtbopt_geometry
@@ -381,7 +381,7 @@ class XTBOutput(FolderOutputMixin):
 
         # Tier 3: g98 standard orientation (hess)
         if self.g98_file and self.g98_file.standard_orientation:
-            logger.info(
+            logger.debug(
                 f"Reading molecule from file: {self.g98_file.filepath}."
             )
             orientation = list(self.g98_file.standard_orientation)
@@ -390,7 +390,7 @@ class XTBOutput(FolderOutputMixin):
 
         # Tier 4: input geometry (sp)
         if self.normal_termination and self.input_geometry:
-            logger.info(
+            logger.debug(
                 f"Reading molecule from file: {self.input_geometry_file.filepath}."
             )
             mol = self.input_geometry

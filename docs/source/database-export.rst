@@ -107,7 +107,7 @@ from the extension of the output file specified with ``-o/--output``.
 
 **Supported extra CSV keys** (``-k``):
 
-``program``, ``method``, ``basis``, ``charge``, ``multiplicity``, ``smiles``, ``total_energy``, ``homo_energy``,
+``program``, ``method``, ``basis``, ``charge``, ``multiplicity``, ``total_energy``, ``homo_energy``,
 ``lumo_energy``, ``fmo_gap``, ``zero_point_energy``, ``enthalpy``, ``entropy``, ``gibbs_free_energy``.
 
 .. note::

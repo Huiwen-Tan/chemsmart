@@ -49,7 +49,7 @@ class TestORCARoute:
         ]
         assert r3.functional is None
         assert r3.ab_initio == "dlpno-ccsd(t)"
-        assert r3.basis is None
+        assert r3.basis == "extrapolate(2/3,cc)"
         assert r3.extrapolation_basis == "extrapolate(2/3,cc)"
         assert r3.auxiliary_basis == "autoaux"
         assert r3.defgrid == "defgrid2"
@@ -95,6 +95,32 @@ class TestORCARoute:
         assert r6.route_keywords == ["b3lyp", "d3zero", "def2-tzvp"]
         assert r6.functional == "b3lyp"
         assert r6.dispersion == "d3zero"
+        assert r6.method == "b3lyp-d3zero"
+
+        s6g = "! B3LYP/G D3BJ def2-TZVP"
+        r6g = ORCARoute(route_string=s6g)
+        assert r6g.functional == "b3lyp/g"
+        assert r6g.dispersion == "d3bj"
+        assert r6g.method == "b3lyp/g-d3bj"
+        assert r6g.basis == "def2-tzvp"
+
+        s6g_plain = "! B3LYP/G def2-TZVP"
+        r6g_plain = ORCARoute(route_string=s6g_plain)
+        assert r6g_plain.functional == "b3lyp/g"
+        assert r6g_plain.method == "b3lyp/g"
+        assert r6g_plain.dispersion is None
+
+        # Composite methods with built-in basis sets
+        s_r2scan3c = "! R2SCAN-3C Opt Freq"
+        r_r2scan3c = ORCARoute(route_string=s_r2scan3c)
+        assert r_r2scan3c.ab_initio == "r2scan-3c"
+        assert r_r2scan3c.basis == "def2-tzvp"
+        assert r_r2scan3c.method == "r2scan-3c"
+
+        s_pbeh3c = "! PBEH-3C"
+        r_pbeh3c = ORCARoute(route_string=s_pbeh3c)
+        assert r_pbeh3c.ab_initio == "pbeh-3c"
+        assert r_pbeh3c.basis == "def2-svp"
         assert r6.ab_initio is None
         assert r6.basis == "def2-tzvp"
         assert r6.extrapolation_basis is None
@@ -1146,7 +1172,7 @@ class TestORCAOutput:
             == "!  DLPNO-CCSD(T) Extrapolate(2/3,cc) AutoAux DEFGRID3 TightSCF KDIIS".lower()
         )
         assert orca_out.functional is None
-        assert orca_out.basis is None
+        assert orca_out.basis == "extrapolate(2/3,cc)"
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()
@@ -1189,7 +1215,7 @@ class TestORCAOutput:
         )
         assert orca_out.spin == "restricted"
         assert orca_out.functional is None
-        assert orca_out.basis is None
+        assert orca_out.basis == "extrapolate(2/3,cc)"
         assert orca_out.ab_initio == "DLPNO-CCSD(T)".lower()
         assert orca_out.aux_basis == "AutoAux".lower()
         assert orca_out.extrapolation_basis == "Extrapolate(2/3,cc)".lower()

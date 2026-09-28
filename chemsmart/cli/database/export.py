@@ -93,7 +93,7 @@ def export(
 
     \b
     Supported CSV keys:
-      program, method, basis, charge, multiplicity, smiles,
+      program, method, basis, charge, multiplicity,
       total_energy, homo_energy, lumo_energy, fmo_gap,
       zero_point_energy, enthalpy, entropy, gibbs_free_energy
 

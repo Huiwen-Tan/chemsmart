@@ -99,7 +99,6 @@ TARGET_CONFIG = {
         "entity_name": "molecule",
         "queryable_fields": {
             "chemical_formula": "m.chemical_formula",
-            "smiles": "m.smiles",
             "inchi": "m.inchi",
             "number_of_atoms": "m.number_of_atoms",
             "mass": "m.mass",
@@ -107,7 +106,7 @@ TARGET_CONFIG = {
         "summary_select": """
             SELECT
                 m.molecule_id, m.chemical_formula, m.number_of_atoms,
-                m.mass, m.smiles,
+                m.mass,
                 (SELECT COUNT(*) FROM structures s2
                  WHERE s2.molecule_id = m.molecule_id) AS num_structures,
                 (SELECT COUNT(DISTINCT rs2.record_id)
@@ -123,7 +122,6 @@ TARGET_CONFIG = {
         "order_by": "m.chemical_formula",
         "table_columns": [
             ("Molecule ID", "molecule_id", 27, "<"),
-            ("SMILES", "smiles", 18, "<"),
             ("Formula", "chemical_formula", 18, "<"),
             ("Atoms", "number_of_atoms", 6, ">"),
             ("Mass", "mass", 8, ">"),
@@ -132,11 +130,6 @@ TARGET_CONFIG = {
         ],
         "value_formatters": {
             "molecule_id": lambda v, w: str(v)[:w],
-            "smiles": lambda v, w: (
-                str(v or "")
-                if len(str(v or "")) <= w
-                else str(v or "")[: max(0, w - 3)] + "..."
-            ),
             "mass": lambda v, w: (
                 format_float(v, 2) if isinstance(v, (int, float)) else str(v)
             ),

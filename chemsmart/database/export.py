@@ -35,7 +35,6 @@ CSV_OPTIONAL_COLUMNS = {
     "basis",
     "charge",
     "multiplicity",
-    "smiles",
     "total_energy",
     "homo_energy",
     "lumo_energy",
@@ -133,7 +132,6 @@ class DatabaseExporter:
             "chemical_formula": last_mol.get("chemical_formula"),
             "charge": last_mol.get("charge"),
             "multiplicity": last_mol.get("multiplicity"),
-            "smiles": last_mol.get("smiles"),
         }
         return {col: lookup.get(col, "NaN") for col in columns}
 

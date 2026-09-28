@@ -50,7 +50,7 @@ These entities represent *what was computed*, *what chemical species was studied
 
    -  -  ``molecule``
       -  One chemical species
-      -  Identified by ``molecule_id``. Stores connectivity-level molecular identity, such as formula, SMILES, InChI,
+      -  Identified by ``molecule_id``. Stores connectivity-level molecular identity, such as formula, InChI,
          composition, and basic molecular descriptors.
 
    -  -  ``structure``
@@ -156,7 +156,7 @@ A typical CHEMSMART database workflow is:
 -  Structure identity is geometry-based and includes charge and multiplicity. The same Cartesian geometry with different
    charge or spin state is treated as a different structure.
 
--  Molecular descriptors such as ``is_aromatic``, ``is_multicomponent``, ``smiles``, and ``inchi`` are derived from 3D
-   geometry using RDKit heuristics, not from first-principles electronic structure. Bond orders are inferred from
-   interatomic distances, which may give incorrect results for unusual bonding, metal-ligand interactions, or strained
-   systems. These tags should be treated as approximate.
+-  Molecular descriptors such as ``is_aromatic``, ``is_multicomponent``, and ``inchi`` are derived from 3D geometry
+   using RDKit heuristics, not from first-principles electronic structure. Bond orders are inferred from interatomic
+   distances, which may give incorrect results for unusual bonding, metal-ligand interactions, or strained systems.
+   These tags should be treated as approximate.

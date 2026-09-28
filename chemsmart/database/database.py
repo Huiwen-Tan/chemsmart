@@ -144,7 +144,6 @@ class Database:
                     molecule_label TEXT,
                     empirical_formula TEXT,
                     chemical_formula TEXT,
-                    smiles TEXT,
                     inchi TEXT,
                     chiral_centers_json TEXT,
                     number_of_atoms INTEGER,
@@ -369,7 +368,7 @@ class Database:
         For each Molecule entry in the record, splits its data into:
         1. UPSERT into molecules: dedup by molecule_id; preserve deterministic
            columns (formula, mass, ...) and enrich NULL chemical-perception
-           columns (smiles, inchi, chiral_centers) when later records supply them.
+           columns (inchi, chiral_centers) when later records supply them.
         2. INSERT OR IGNORE into structures (geometry dedup by structure_id)
         3. INSERT into record_structures (per-calculation data)
         """
@@ -390,14 +389,13 @@ class Database:
                 """
                 INSERT INTO molecules (
                     molecule_id, molecule_label, empirical_formula,
-                    chemical_formula, smiles, inchi, chiral_centers_json,
+                    chemical_formula, inchi, chiral_centers_json,
                     number_of_atoms, mass,
                     elements_json, element_counts_json, is_chiral, is_ring,
                     is_aromatic, is_monoatomic, is_diatomic, is_linear,
                     is_multicomponent, num_components
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(molecule_id) DO UPDATE SET
-                    smiles = COALESCE(molecules.smiles, excluded.smiles),
                     inchi = COALESCE(molecules.inchi, excluded.inchi),
                     chiral_centers_json = COALESCE(molecules.chiral_centers_json, excluded.chiral_centers_json)
                 """,
@@ -406,7 +404,6 @@ class Database:
                     mol.get("molecule_label"),
                     mol.get("empirical_formula"),
                     mol.get("chemical_formula"),
-                    mol.get("smiles"),
                     mol.get("inchi"),
                     to_json(mol.get("chiral_centers")),
                     mol.get("number_of_atoms"),
@@ -568,7 +565,7 @@ class Database:
                    s.structure_label, s.chemical_symbols_json, s.positions_json,
                    s.center_of_mass_json, s.moments_of_inertia_json,
                    m.molecule_id, m.molecule_label, m.empirical_formula,
-                   m.chemical_formula, m.smiles, m.inchi, m.chiral_centers_json,
+                   m.chemical_formula, m.inchi, m.chiral_centers_json,
                    m.number_of_atoms, m.mass,
                    m.elements_json, m.element_counts_json, m.is_chiral,
                    m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
@@ -739,7 +736,6 @@ class Database:
             "is_linear": bool(row.get("is_linear")),
             "is_multicomponent": bool(row.get("is_multicomponent")),
             "num_components": row.get("num_components"),
-            "smiles": row.get("smiles"),
             "inchi": row.get("inchi"),
             "chiral_centers": from_json(row.get("chiral_centers_json")),
             "moments_of_inertia": from_json(
@@ -842,7 +838,7 @@ class Database:
 
             # Get last structure's molecule info via three-table join
             struct_cursor = conn.execute(
-                """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
+                """SELECT m.chemical_formula, s.charge, s.multiplicity
                    FROM record_structures rs
                    JOIN structures s ON rs.structure_id = s.structure_id
                    JOIN molecules m ON s.molecule_id = m.molecule_id
@@ -877,7 +873,7 @@ class Database:
                 summary = dict(row)
                 # Get last structure's molecule info via three-table join
                 struct_cursor = conn.execute(
-                    """SELECT m.chemical_formula, s.charge, s.multiplicity, m.smiles
+                    """SELECT m.chemical_formula, s.charge, s.multiplicity
                        FROM record_structures rs
                        JOIN structures s ON rs.structure_id = s.structure_id
                        JOIN molecules m ON s.molecule_id = m.molecule_id
@@ -907,7 +903,7 @@ class Database:
                        s.structure_label, s.chemical_symbols_json, s.positions_json,
                        s.center_of_mass_json, s.moments_of_inertia_json,
                        m.molecule_id, m.molecule_label, m.empirical_formula,
-                       m.chemical_formula, m.smiles, m.inchi, m.chiral_centers_json,
+                       m.chemical_formula, m.inchi, m.chiral_centers_json,
                        m.number_of_atoms, m.mass,
                        m.elements_json, m.element_counts_json, m.is_chiral,
                        m.is_ring, m.is_aromatic, m.is_monoatomic, m.is_diatomic,
@@ -1001,7 +997,7 @@ class Database:
             cursor = conn.execute(
                 """
                 SELECT s.*, m.chemical_formula, m.empirical_formula,
-                       m.number_of_atoms, m.mass, m.smiles
+                       m.number_of_atoms, m.mass
                 FROM structures s
                 JOIN molecules m ON s.molecule_id = m.molecule_id
                 WHERE s.structure_id = ?
@@ -1022,7 +1018,7 @@ class Database:
         try:
             cursor = conn.execute("""
                 SELECT s.*, m.chemical_formula, m.empirical_formula,
-                       m.number_of_atoms, m.mass, m.smiles
+                       m.number_of_atoms, m.mass
                 FROM structures s
                 JOIN molecules m ON s.molecule_id = m.molecule_id
                 ORDER BY s.molecule_id, s.structure_id
@@ -1203,7 +1199,7 @@ class Database:
             cursor = conn.execute(
                 """
                 SELECT s.*, m.chemical_formula, m.empirical_formula,
-                       m.number_of_atoms, m.mass, m.smiles
+                       m.number_of_atoms, m.mass
                 FROM structures s
                 JOIN molecules m ON s.molecule_id = m.molecule_id
                 WHERE s.molecule_id = ?
@@ -1276,7 +1272,6 @@ class Database:
             "molecule_label": row.get("molecule_label"),
             "empirical_formula": row.get("empirical_formula"),
             "chemical_formula": row.get("chemical_formula"),
-            "smiles": row.get("smiles"),
             "inchi": row.get("inchi"),
             "chiral_centers": from_json(row.get("chiral_centers_json")),
             "number_of_atoms": row.get("number_of_atoms"),
@@ -1319,7 +1314,6 @@ class Database:
             "empirical_formula",
             "number_of_atoms",
             "mass",
-            "smiles",
         ):
             if key in row:
                 d[key] = row[key]

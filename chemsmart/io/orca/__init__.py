@@ -113,6 +113,7 @@ class ORCARefs:
         # ***************************************
         "B1LYP",  # One parameter Hybrid of BLYP
         "B3LYP",  # Three parameter Hybrid of BLYP [309]
+        "B3LYP/G",  # Gaussian VWN5 variant of B3LYP
         "B1P",  # Analogous with Perdew correlation
         "B3P",  # Analogous with Perdew correlation
         "G1LYP",  # 1 par. analog with Gill 96 X
@@ -687,6 +688,12 @@ class ORCARefs:
         "PM3",
         "AM1",
     ]
+
+    ORCA_QM2_BUILT_IN_METHOD_BASIS = {
+        "HF-3C": "def2-SVP",
+        "PBEH-3C": "def2-SVP",
+        "R2SCAN-3C": "def2-TZVP",
+    }
 
     @property
     def orca_blocks(self):
@@ -1343,6 +1350,13 @@ class ORCARefs:
     def orca_qm2_built_in_methods(self):
         return [i.lower() for i in self.ORCA_QM2_BUILT_IN_METHODS]
 
+    @property
+    def orca_qm2_built_in_method_basis(self):
+        return {
+            method.lower(): basis.lower()
+            for method, basis in self.ORCA_QM2_BUILT_IN_METHOD_BASIS.items()
+        }
+
 
 # Global constants for convenient access to ORCA reference data
 orca_ref = ORCARefs()
@@ -1361,3 +1375,4 @@ ORCA_ALL_SCF_ALGORITHMS = orca_ref.ORCA_SCF_ALGORITHMS
 ORCA_ALL_DISPERSION_CORRECTIONS = orca_ref.ORCA_DISPERSION_CORRECTIONS
 ORCA_ALL_QMMM_JOBTYPE = orca_ref.orca_qmmm_jobtype
 ORCA_ALL_QM2_BUILT_IN_METHODS = orca_ref.orca_qm2_built_in_methods
+ORCA_QM2_BUILT_IN_METHOD_BASIS = orca_ref.orca_qm2_built_in_method_basis

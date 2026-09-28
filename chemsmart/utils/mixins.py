@@ -1169,6 +1169,8 @@ class ORCAFileMixin(FileMixin):
                 matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
+                if line.strip().startswith("Solvent:"):
+                    return line.split()[-1].lower()
                 raise Exception(
                     "Your input file specifies solvent but solvent is not in quotes, "
                     "thus, your input file is not valid to run for ORCA!"
@@ -1184,6 +1186,10 @@ class ORCAFileMixin(FileMixin):
         m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
         if m:
             return m.group(1)
+        return None
+
+    @property
+    def custom_solvent(self):
         return None
 
     # properties from orca route string

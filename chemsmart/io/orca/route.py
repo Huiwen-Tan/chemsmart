@@ -10,6 +10,7 @@ from chemsmart.io.orca import (
     ORCA_ALL_JOB_TYPES,
     ORCA_ALL_QM2_BUILT_IN_METHODS,
     ORCA_ALL_SCF_ALGORITHMS,
+    ORCA_QM2_BUILT_IN_METHOD_BASIS,
     ORCA_SCF_CONVERGENCE,
 )
 
@@ -75,17 +76,23 @@ class ORCARoute:
         Extract ab initio method from route keywords.
 
         Returns:
-            str: Ab initio method name or None if not found
+            str: Ab initio method name or composite method or None if not found
         """
         for route_keyword in self.route_keywords:
             if route_keyword in ORCA_ALL_AB_INITIO:
+                return route_keyword
+            if route_keyword in ORCA_ALL_QM2_BUILT_IN_METHODS:
                 return route_keyword
         return None
 
     @property
     def method(self):
         """Extract the computational method (functional or ab initio)."""
-        return self.functional or self.ab_initio
+        method = self.functional or self.ab_initio
+        dispersion = self.dispersion
+        if method and dispersion and not method.endswith(f"-{dispersion}"):
+            return f"{method}-{dispersion}"
+        return method
 
     @property
     def dispersion(self):
@@ -111,6 +118,12 @@ class ORCARoute:
         for route_keyword in self.route_keywords:
             if route_keyword in ORCA_ALL_BASIS_SETS:
                 return route_keyword
+        # Composite methods with built-in basis sets.
+        method = self.ab_initio
+        if method and method in ORCA_QM2_BUILT_IN_METHOD_BASIS:
+            return ORCA_QM2_BUILT_IN_METHOD_BASIS[method]
+        if self.extrapolation_basis:
+            return self.extrapolation_basis
         return None
 
     @property
